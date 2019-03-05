@@ -1,5 +1,7 @@
-LIBESL  = libesl.a
-CFLAGS  = -I include/
+ESLPATH = esl
+LIBESL  = $(ESLPATH)/.libs/libesl.a
+CFLAGS  = -I$(ESLPATH)/src/include
+#include $(FS_SRC_DIR)/build/modmake.rules 
 
 
 all: server.c $(LIBESL)
