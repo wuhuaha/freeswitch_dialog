@@ -69,10 +69,21 @@ static void fy_esl_callback(esl_socket_t server_sock, esl_socket_t client_sock, 
 	esl_disconnect(&handle);
 }
 
+static esl_socket_t server_sock = ESL_SOCK_INVALID;
+
+static void handle_sig(int sig)
+{
+	shutdown(server_sock, 2);
+
+}
+
 int main(int argc, char **argv)
 {
+	signal(SIGINT, handle_sig);
+	signal(SIGCHLD, SIG_IGN);
+	
 	esl_global_set_default_logger(7);
-	esl_listen_threaded("localhost", 9000, fy_esl_callback, NULL, 100000);
+	esl_listen("localhost", 9000, mycallback, NULL, &server_sock);
 	
 	return 0;
 }
