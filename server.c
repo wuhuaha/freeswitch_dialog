@@ -58,15 +58,16 @@ void process_event(esl_handle_t *handle, esl_event_t *event)
             esl_log(ESL_LOG_INFO, "New Call %s\n", uuid);
 
             esl_execute(handle, "answer", NULL, uuid);
-			esl_execute(&handle, "playback", "/opt/swmy.wav", NULL);
+			esl_execute(handle, "playback", "/opt/swmy.wav", NULL);
 			sleep(2);
-			esl_execute(&handle, "hangup", NULL, NULL);
+			esl_execute(handle, "hangup", NULL, NULL);
 			/*
             esl_execute(handle, "set", "tts_engine=tts_commandline", uuid);
             esl_execute(handle, "set", "tts_voice=Ting-Ting", uuid);
             esl_execute(handle, "speak", "您好，欢迎使用空中充值服务", uuid);
-
+			*/
 again:
+			/*
             esl_execute(handle, "set", "charge_state=WAIT_ACCOUNT", uuid);
 
             esl_execute(handle, "play_and_get_digits",
