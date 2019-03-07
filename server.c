@@ -114,17 +114,19 @@ again:
     free((void *)uuid);
 }
 
-int make_call(esl_handle_t *handle, char *phone_number, char *phone_prefix, char *uuid, char *caller_id, char *ip, char *codec)
+int make_call(esl_handle_t *handle, char *phone_number, char *phone_prefix, char *uuid, char *caller_id, char *domain, char *codec, char *api_cmd)
 {
     char call_string[1024];
     char sip_string[128];  //example: sip:1001@192.168.1.1:5060  or  user/1001
     char uuid_string[64];
     char uuid_generate[64];
     char codec_string[64];
+	char api_string[64];
     char caller_id_string[128];
- 
-    if(ip != NULL){
-        snprintf(sip_string, sizeof(sip_string), "sip:%s%s@%s", (phone_prefix == NULL ? "" : phone_prefix), phone_number, ip);
+
+	//标准化sip_string为标准格式，在有domain时使用domain呼叫，否则认为是本机注册用户
+    if(domain != NULL){
+        snprintf(sip_string, sizeof(sip_string), "sip:%s%s@%s", (phone_prefix == NULL ? "" : phone_prefix), phone_number, domain);
     }else{
         snprintf(sip_string, sizeof(sip_string), "user/%s%s", (phone_prefix == NULL ? "" : phone_prefix), phone_number);
     }
@@ -148,9 +150,13 @@ int make_call(esl_handle_t *handle, char *phone_number, char *phone_prefix, char
         *caller_id_string = 0;
     }
 
-    sprintf(call_string, "bgapi originate %s%s%s%s &echo", uuid_string, caller_id_string, codec_string, sip_string);
-    //sprintf(call_string, "api originate {origination_uuid=%s}{origination_caller_id_number=%s}{origination_caller_id_name=%s}%suser/%s%s &echo", uuid, caller_id, caller_id, codec_string, phone_prefix, phone_number);
-    //sprintf(call_string, "api originate {origination_uuid=%s}{origination_caller_id_number=18001024001,origination_caller_id_name=18001024001}%s &echo", codec_string, sip_string);
+	if(api_cmd != NULL){
+        snprintf(api_string, sizeof(api_string), "%s", api_cmd);    
+    }else{
+        snprintf(api_string, sizeof(api_string), "&park");;
+    }
+
+    sprintf(call_string, sizeof(call_string), "bgapi originate %s%s%s%s %s", uuid_string, caller_id_string, codec_string, sip_string, api_string);
     esl_log(ESL_LOG_INFO,"%s\n", call_string);
     esl_send(handle, call_string);
 }
@@ -177,7 +183,7 @@ int main(void)
     esl_log(ESL_LOG_INFO, "%s\n", handle.last_sr_reply);
 
 	//esl_send(&handle, "api originate {origination_uuid=123456789}user/1004 &echo");
-    make_call(&handle, "1004", NULL, NULL, "123", NULL, NULL);
+    make_call(&handle, "1004", NULL, NULL, "123", NULL, NULL, NULL);
 
     handle.event_lock = 1;
     while((status = esl_recv_event(&handle, 1, NULL)) == ESL_SUCCESS) {
