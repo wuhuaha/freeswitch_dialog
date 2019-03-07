@@ -85,6 +85,7 @@ again:
         }
         case ESL_EVENT_CHANNEL_EXECUTE_COMPLETE:
         {
+        	/*
             const char *application;
             const char *charge_state;
 
@@ -107,16 +108,15 @@ again:
                     goto again;
                 }
             }
+			*/
             break;
         }
         case ESL_EVENT_CHANNEL_HANGUP_COMPLETE:
-            esl_log(ESL_LOG_INFO, "Hangup %s\n", uuid);
+            //esl_log(ESL_LOG_INFO, "Hangup %s\n", uuid);
             break;
         default:
 			//esl_execute(handle, "answer", NULL, uuid);
 			esl_execute(handle, "playback", "/opt/swmy.wav", uuid);
-			sleep(2);
-			esl_execute(handle, "hangup", NULL, uuid);
 			esl_log(ESL_LOG_INFO, "[%s]%s\n", uuid, esl_event_name(event->event_id));
             break;
     }
