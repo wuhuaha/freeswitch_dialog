@@ -58,6 +58,10 @@ void process_event(esl_handle_t *handle, esl_event_t *event)
             esl_log(ESL_LOG_INFO, "New Call %s\n", uuid);
 
             esl_execute(handle, "answer", NULL, uuid);
+			esl_execute(&handle, "playback", "/opt/swmy.wav", NULL);
+			sleep(2);
+			esl_execute(&handle, "hangup", NULL, NULL);
+			/*
             esl_execute(handle, "set", "tts_engine=tts_commandline", uuid);
             esl_execute(handle, "set", "tts_voice=Ting-Ting", uuid);
             esl_execute(handle, "speak", "您好，欢迎使用空中充值服务", uuid);
@@ -74,7 +78,7 @@ again:
             esl_execute(handle, "play_and_get_digits",
                 "4 5 3 5000 # 'say:请输入您的密码，以井号结束' "
                 ERROR_PROMPT " charge_password ^\\d{4}$", uuid);
-
+			*/
             break;
         }
         case ESL_EVENT_CHANNEL_EXECUTE_COMPLETE:
@@ -156,7 +160,7 @@ int make_call(esl_handle_t *handle, char *phone_number, char *phone_prefix, char
         snprintf(api_string, sizeof(api_string), "&park");;
     }
 
-    sprintf(call_string, sizeof(call_string), "bgapi originate %s%s%s%s %s", uuid_string, caller_id_string, codec_string, sip_string, api_string);
+    snprintf(call_string, sizeof(call_string), "bgapi originate %s%s%s%s %s", uuid_string, caller_id_string, codec_string, sip_string, api_string);
     esl_log(ESL_LOG_INFO,"%s\n", call_string);
     esl_send(handle, call_string);
 }
