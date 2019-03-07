@@ -48,6 +48,7 @@ void process_event(esl_handle_t *handle, esl_event_t *event)
     switch (event->event_id) {
         case ESL_EVENT_CHANNEL_PARK:
         {
+        	/*
             const char *service;
 
             service = esl_event_get_header(event, "variable_service");
@@ -56,12 +57,12 @@ void process_event(esl_handle_t *handle, esl_event_t *event)
             if (!service || (service && strcmp(service, "icharge"))) break;
 
             esl_log(ESL_LOG_INFO, "New Call %s\n", uuid);
-
+			
             esl_execute(handle, "answer", NULL, uuid);
 			esl_execute(handle, "playback", "/opt/swmy.wav", NULL);
 			sleep(2);
 			esl_execute(handle, "hangup", NULL, NULL);
-			/*
+			
             esl_execute(handle, "set", "tts_engine=tts_commandline", uuid);
             esl_execute(handle, "set", "tts_voice=Ting-Ting", uuid);
             esl_execute(handle, "speak", "您好，欢迎使用空中充值服务", uuid);
@@ -112,10 +113,10 @@ again:
             esl_log(ESL_LOG_INFO, "Hangup %s\n", uuid);
             break;
         default:
-			esl_execute(handle, "answer", NULL, uuid);
-			esl_execute(handle, "playback", "/opt/swmy.wav", NULL);
+			//esl_execute(handle, "answer", NULL, uuid);
+			esl_execute(handle, "playback", "/opt/swmy.wav", uuid);
 			sleep(2);
-			esl_execute(handle, "hangup", NULL, NULL);
+			esl_execute(handle, "hangup", NULL, uuid);
 			esl_log(ESL_LOG_INFO, "[%s]%s\n", uuid, esl_event_name(event->event_id));
             break;
     }
