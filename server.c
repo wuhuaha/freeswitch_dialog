@@ -112,6 +112,10 @@ again:
             esl_log(ESL_LOG_INFO, "Hangup %s\n", uuid);
             break;
         default:
+			esl_execute(handle, "answer", NULL, uuid);
+			esl_execute(handle, "playback", "/opt/swmy.wav", NULL);
+			sleep(2);
+			esl_execute(handle, "hangup", NULL, NULL);
 			esl_log(ESL_LOG_INFO, "[%s]%s\n", uuid, esl_event_name(event->event_id));
             break;
     }
