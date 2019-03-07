@@ -1,89 +1,194 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <esl.h>
+#include <time.h>
 
-static void fy_esl_callback(esl_socket_t server_sock, esl_socket_t client_sock, struct sockaddr_in *addr, void *user_data)
+#define ERROR_PROMPT "say:输入错误，请重新输入"
+
+char *generate_string(char *str, int length)
+{
+    register int i,flag;
+     
+    srand(time(NULL));//通过时间函数设置随机数种子，使得每次运行结果随机。
+    for(i = 0; i < length; i ++)
+    {
+		flag = rand()%3;
+		switch(flag)
+		{
+		case 0:
+			str[i] = rand()%26 + 'a'; 
+			break;
+		case 1:
+			str[i] = rand()%26 + 'A'; 
+			break;
+		case 2:
+			str[i] = rand()%10 + '0'; 
+			break;
+		}
+    }
+    str[i] = 0;
+    esl_log(ESL_LOG_INFO,"%s\n", str);//输出生成的随机数。
+     
+    return str;
+}
+
+
+int check_account_password(const char *account, const char *password)
+{
+    return (!strcmp(account, "1111")) && (!strcmp(password, "1111"));
+}
+
+void process_event(esl_handle_t *handle, esl_event_t *event)
+{
+    const char *uuid = esl_event_get_header(event, "Caller-Unique-ID");
+
+    uuid = strdup(uuid);
+    if (!uuid) abort();
+
+    switch (event->event_id) {
+        case ESL_EVENT_CHANNEL_PARK:
+        {
+            const char *service;
+
+            service = esl_event_get_header(event, "variable_service");
+            esl_log(ESL_LOG_INFO, "Service: %s\n", service);
+
+            if (!service || (service && strcmp(service, "icharge"))) break;
+
+            esl_log(ESL_LOG_INFO, "New Call %s\n", uuid);
+
+            esl_execute(handle, "answer", NULL, uuid);
+            esl_execute(handle, "set", "tts_engine=tts_commandline", uuid);
+            esl_execute(handle, "set", "tts_voice=Ting-Ting", uuid);
+            esl_execute(handle, "speak", "您好，欢迎使用空中充值服务", uuid);
+
+again:
+            esl_execute(handle, "set", "charge_state=WAIT_ACCOUNT", uuid);
+
+            esl_execute(handle, "play_and_get_digits",
+                "4 5 3 5000 # 'say:请输入您的账号，以井号结束' "
+                ERROR_PROMPT " charge_account ^\\d{4}$", uuid);
+
+            esl_execute(handle, "set", "charge_state=WAIT_PASSWORD", uuid);
+
+            esl_execute(handle, "play_and_get_digits",
+                "4 5 3 5000 # 'say:请输入您的密码，以井号结束' "
+                ERROR_PROMPT " charge_password ^\\d{4}$", uuid);
+
+            break;
+        }
+        case ESL_EVENT_CHANNEL_EXECUTE_COMPLETE:
+        {
+            const char *application;
+            const char *charge_state;
+
+            application = esl_event_get_header(event, "Application");
+            charge_state = esl_event_get_header(event, "variable_charge_state");
+
+            if (!strcmp(application, "play_and_get_digits") &&
+                !strcmp(charge_state, "WAIT_PASSWORD")) {
+
+                const char *account = esl_event_get_header(event, "variable_charge_account");
+                const char *password = esl_event_get_header(event, "variable_charge_password");
+
+                if (account && password && check_account_password(account, password)) {
+                    esl_log(ESL_LOG_INFO, "Account: %s Balance: 100\n", account);
+                    esl_execute(handle, "speak", "您的余额是100元", uuid);
+                    esl_execute(handle, "speak", "再见", uuid);
+                    esl_execute(handle, "hangup", NULL, uuid);
+                } else {
+                    esl_execute(handle, "speak", "账号密码错误", uuid);
+                    goto again;
+                }
+            }
+            break;
+        }
+        case ESL_EVENT_CHANNEL_HANGUP_COMPLETE:
+            esl_log(ESL_LOG_INFO, "Hangup %s\n", uuid);
+            break;
+        default:
+			esl_log(ESL_LOG_INFO, "[%s]%s\n", uuid, esl_event_name(event->event_id));
+            break;
+    }
+
+    free((void *)uuid);
+}
+
+int make_call(esl_handle_t *handle, char *phone_number, char *phone_prefix, char *uuid, char *caller_id, char *ip, char *codec)
+{
+    char call_string[1024];
+    char sip_string[128];  //example: sip:1001@192.168.1.1:5060  or  user/1001
+    char uuid_string[64];
+    char uuid_generate[64];
+    char codec_string[64];
+    char caller_id_string[128];
+ 
+    if(ip != NULL){
+        snprintf(sip_string, sizeof(sip_string), "sip:%s%s@%s", (phone_prefix == NULL ? "" : phone_prefix), phone_number, ip);
+    }else{
+        snprintf(sip_string, sizeof(sip_string), "user/%s%s", (phone_prefix == NULL ? "" : phone_prefix), phone_number);
+    }
+
+    if(codec != NULL){
+        snprintf(codec_string, sizeof(codec_string), "{absolute_codec_string=%s}", codec);    
+    }else{
+        *codec_string = 0;
+    }
+
+    if(uuid != NULL){
+        snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", uuid);
+    }else{
+        generate_string(uuid_generate, 10);
+        snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", uuid_generate);
+    }
+
+    if(caller_id != NULL){
+        snprintf(caller_id_string, sizeof(caller_id_string), "{origination_caller_id_number=%s}{origination_caller_id_name=%s}", caller_id, caller_id);    
+    }else{
+        *caller_id_string = 0;
+    }
+
+    sprintf(call_string, "bgapi originate %s%s%s%s &echo", uuid_string, caller_id_string, codec_string, sip_string);
+    //sprintf(call_string, "api originate {origination_uuid=%s}{origination_caller_id_number=%s}{origination_caller_id_name=%s}%suser/%s%s &echo", uuid, caller_id, caller_id, codec_string, phone_prefix, phone_number);
+    //sprintf(call_string, "api originate {origination_uuid=%s}{origination_caller_id_number=18001024001,origination_caller_id_name=18001024001}%s &echo", codec_string, sip_string);
+    esl_log(ESL_LOG_INFO,"%s\n", call_string);
+    esl_send(handle, call_string);
+}
+
+int main(void)
 {
 	esl_handle_t handle = {{0}};
-	time_t exp          = 0;
-    char cmd_str[1024]  = {0};
-    const char * uuid   = NULL;
-	int done            = 0;
 	esl_status_t status;
+    const char *uuid;
 
-	esl_attach_handle(&handle, client_sock, addr);
+    esl_global_set_default_logger(ESL_LOG_LEVEL_INFO);
 
-	esl_log(ESL_LOG_INFO, "Connected! %d\n", handle.sock);
+    status = esl_connect(&handle, "127.0.0.1", 8021, NULL, "ClueCon");
 
-    uuid = esl_event_get_header(handle.info_event, "caller-unique-id");
+    if (status != ESL_SUCCESS) {
+        esl_log(ESL_LOG_INFO, "Connect Error: %d\n", status);
+        exit(1);
+    }
 
-	esl_filter(&handle, "unique-id", uuid);
-	esl_events(&handle, ESL_EVENT_TYPE_PLAIN, "SESSION_HEARTBEAT CHANNEL_ANSWER CHANNEL_ORIGINATE CHANNEL_PROGRESS CHANNEL_HANGUP "
-			   "CHANNEL_BRIDGE CHANNEL_UNBRIDGE CHANNEL_OUTGOING CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE DTMF CUSTOM conference::maintenance");
-
-	esl_send_recv(&handle, "linger");
-
-	esl_execute(&handle, "answer", NULL, NULL);
-    esl_execute(&handle, "playback", "/opt/swmy.wav", NULL);
-    sleep(8);
-
-    snprintf(cmd_str, sizeof(cmd_str), "bgapi uuid_break %s", uuid);
-    esl_send_recv(&handle, cmd_str);
+    esl_log(ESL_LOG_INFO, "Connected to FreeSWITCH\n");
+    esl_events(&handle, ESL_EVENT_TYPE_PLAIN,
+        "SESSION_HEARTBEAT CHANNEL_ANSWER CHANNEL_ORIGINATE CHANNEL_PROGRESS CHANNEL_HANGUP "
+			   "CHANNEL_BRIDGE CHANNEL_UNBRIDGE CHANNEL_OUTGOING CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE DTMF");
     esl_log(ESL_LOG_INFO, "%s\n", handle.last_sr_reply);
-    sleep(5);
 
-    esl_execute(&handle, "playback", "/opt/swmy.wav", NULL);
-    esl_log(ESL_LOG_INFO, "%s\n", handle.last_sr_reply);
-    sleep(10);
+	//esl_send(&handle, "api originate {origination_uuid=123456789}user/1004 &echo");
+    make_call(&handle, "1004", NULL, NULL, "123", NULL, NULL);
 
-    esl_send_recv(&handle, cmd_str);
-    esl_execute(&handle, "hangup", NULL, NULL);
-	
-	while((status = esl_recv_timed(&handle, 1000)) != ESL_FAIL) 
-    {
-		if (done) 
-        {
-			if (time(NULL) >= exp) 
-            {
-				break;
-			}
-		} 
-        else if (status == ESL_SUCCESS) 
-        {
-			const char *type = esl_event_get_header(handle.last_event, "content-type");
-			if (type && !strcasecmp(type, "text/disconnect-notice")) 
-            {
-				const char *dispo = esl_event_get_header(handle.last_event, "content-disposition");
-				esl_log(ESL_LOG_INFO, "Got a disconnection notice dispostion: [%s]\n", dispo ? dispo : "");
-				if (dispo && !strcmp(dispo, "linger")) 
-                {
-					done = 1;
-					esl_log(ESL_LOG_INFO, "Waiting 5 seconds for any remaining events.\n");
-					exp = time(NULL) + 5;
-				}
-			}
-		}
+    handle.event_lock = 1;
+    while((status = esl_recv_event(&handle, 1, NULL)) == ESL_SUCCESS) {
+        if (handle.last_ievent) {
+            process_event(&handle, handle.last_ievent);
+        }
 	}
-	
-	esl_log(ESL_LOG_INFO, "Disconnected! %d\n", handle.sock);
+
+end:
+
 	esl_disconnect(&handle);
-}
 
-static esl_socket_t server_sock = ESL_SOCK_INVALID;
-
-static void handle_sig(int sig)
-{
-	shutdown(server_sock, 2);
-
-}
-
-int main(int argc, char **argv)
-{
-	signal(SIGINT, handle_sig);
-	signal(SIGCHLD, SIG_IGN);
-	
-	esl_global_set_default_logger(7);
-	esl_listen("localhost", 9000, mycallback, NULL, &server_sock);
-	
 	return 0;
 }
