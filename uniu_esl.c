@@ -1,0 +1,436 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <esl.h>
+#include <time.h>
+#include "uniu_list.h"
+#include "uniu_esl.h"
+
+char *generate_string(char *str, int length)
+{
+    register int i,flag;
+     
+    srand(time(NULL));//通过时间函数设置随机数种子，使得每次运行结果随机。
+    for(i = 0; i < length; i ++)
+    {
+		flag = rand()%3;
+		switch(flag)
+		{
+		case 0:
+			str[i] = rand()%26 + 'a'; 
+			break;
+		case 1:
+			str[i] = rand()%26 + 'A'; 
+			break;
+		case 2:
+			str[i] = rand()%10 + '0'; 
+			break;
+		}
+    }
+    str[i] = 0;
+    esl_log(ESL_LOG_INFO,"%s\n", str);//输出生成的随机数。
+     
+    return str;
+}
+
+inline char *string_malloc_copy(char *src)
+{
+    register int i;
+    if(src == NULL){
+        //printf("src string is NULL\n");
+        return NULL;
+    }
+    int length = strlen(src);
+    char *dst = (char *)malloc(length + 1);
+    for(i = 0; i < length; i++)
+    {
+        dst[i] = *src++;
+    }
+    dst[i] = 0;
+    return dst;
+    
+}
+
+//将音频文件加入到播放列表中
+int add_to_playlist(char *file_name, sip_config_t config, int if_last, int if_clean)
+{
+    link_t play_list = config->play_list;
+    if(play_list == NULL){
+        esl_log(ESL_LOG_INFO, "play_list is not init!now init it~\n");
+        play_list = new_link_list();
+    }
+    if(file_name == NULL){
+        esl_log(ESL_LOG_INFO, "file_name is NULL\n");
+        return -1;
+    }
+    if(if_clean){
+        link_list_clear_free(play_list);
+        esl_log(ESL_LOG_INFO, "clear and free all node in the play_list\n"); 
+    }
+    char *file = string_malloc_copy(file_name);
+    esl_log(ESL_LOG_INFO, "file:%s\n",file);
+    if(file == NULL){
+        esl_log(ESL_LOG_INFO, "file_name malloc error,exit!\n");
+        return -1;
+    }
+    if(if_last){
+        link_list_add_last(play_list, file);
+    }else{
+        link_list_add_first(play_list, file);
+    }
+    return 0;
+}
+
+char *get_from_playlist(sip_config_t config, char *play_file_name)
+{
+    char *value = link_list_get(config->play_list, 0);
+    if(value != NULL){
+        sprintf(play_file_name, "%s", value);
+        SAFE_FREE(value);
+    }else{
+        play_file_name = NULL;
+    }
+    link_list_remove_first(config->play_list);
+    return play_file_name;
+}
+
+// 获取wav文件的时长，单位：毫秒
+double get_wav_time_length(char* file_name)
+{
+	double len = 0.0;
+ 
+	if (file_name != NULL)
+	{
+		FILE* fp;
+		fp = fopen(file_name, "rb");
+		if (fp != NULL)
+		{
+			int i;
+			int j;
+			fseek(fp, 28, SEEK_SET);
+			fread(&i, sizeof(i), 1, fp);
+			fseek(fp, 40, SEEK_SET);
+			fread(&j, sizeof(j), 1, fp);		
+ 
+			fclose(fp);
+			fp = NULL;
+ 
+			len = (double)j*1000/(double)i;
+		}
+	}
+ 
+	return len;
+}
+
+/*return  n ms*/
+inline int timeval_sub(struct timeval t1, struct timeval t2)
+{
+    return ((t1.tv_sec - t2.tv_sec) * 1000000 + t1.tv_usec - t2.tv_usec) / 1000;
+}
+
+int play_wav_file(char *file_name, sip_config_t config)
+{
+    snprintf(config->playing_file_status.play_file_name, sizeof(config->playing_file_status.play_file_name), "%s", file_name);
+    esl_execute(config->handle, "playback", file_name, config->uuid);
+    //gettimeofday(&(config->playing_file_status.play_start_time), NULL);
+    //config->playing_file_status.play_file_length_ms = get_wav_time_length(file_name);
+    return 0;
+}
+
+//将正在拨打的音频重置掉
+int reset_playing_file_status(sip_config_t config)
+{
+    *(config->playing_file_status.play_file_name) = 0;
+    config->playing_file_status.play_file_length_ms = 0;
+    return 0;
+}
+
+//when playing file last time less than protect(ms), clean play list, else, break it and clean play list
+int break_playing_file(sip_config_t config, int protect)
+{
+    char cmd_str[256];
+    struct timeval now;
+    gettimeofday(&now,NULL);
+    int remain_time = config->playing_file_status.play_file_length_ms - timeval_sub(now, config->playing_file_status.play_start_time);
+    esl_log(ESL_LOG_INFO, "playing file[%s](whole length [%lf]ms);now played time:[%d]((%d - %d)*1000 + (%d - %d)/1000);remain_time:[%lf]ms\n", 
+                config->playing_file_status.play_file_name, config->playing_file_status.play_file_length_ms, 
+                    timeval_sub(now, config->playing_file_status.play_start_time), now.tv_sec, config->playing_file_status.play_start_time.tv_sec, now.tv_usec, config->playing_file_status.play_start_time.tv_usec,
+                        remain_time);
+    if(remain_time > protect){
+        snprintf(cmd_str, sizeof(cmd_str), "bgapi uuid_break %s", config->uuid);
+        esl_send_recv(config->handle, cmd_str); 
+        esl_log(ESL_LOG_INFO, "break playing file[%s]\n",config->playing_file_status.play_file_name);
+        esl_log(ESL_LOG_INFO, "%s\n",config->handle->last_sr_reply);
+        *(config->playing_file_status.play_file_name) = 0;
+        config->playing_file_status.play_file_length_ms = 0;
+    }
+    link_list_clear_free(config->play_list);
+    esl_log(ESL_LOG_INFO, "clear and free all node in the play_list\n"); 
+    return 0;
+}
+
+int make_call(sip_config_t config)
+{
+    char call_string[1024];
+    char sip_string[128];  //example: sip:1001@192.168.1.1:5060  or  user/1001
+    char uuid_string[128];
+    char uuid_generate[256];
+    char codec_string[64];
+	char api_string[512];
+    char caller_id_string[128];  
+
+	//标准化sip_string为标准格式，在有domain时使用domain呼叫，否则认为是本机注册用户
+    if( config->info->domain != NULL){
+        snprintf(sip_string, sizeof(sip_string), "sofia/external/sip:%s%s@%s", (config->info->phone_prefix == NULL ? "" : config->info->phone_prefix), config->info->phone_number, config->info->domain);
+    }else{
+        snprintf(sip_string, sizeof(sip_string), "user/%s%s", (config->info->phone_prefix == NULL ? "" : config->info->phone_prefix), config->info->phone_number);
+    }
+
+    if(config->info->codec != NULL){
+        snprintf(codec_string, sizeof(codec_string), "{absolute_codec_string=%s}", config->info->codec);    
+    }else{
+        *codec_string = 0;
+    }
+
+    if(config->uuid != NULL){
+        snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", config->uuid);
+    }else{
+        //generate_string(uuid_generate, 10);
+        //snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", uuid_generate);
+        esl_log(ESL_LOG_INFO,"[ERROR]None uuid\n");
+
+    }
+
+    if(config->info->caller_id != NULL){
+        snprintf(caller_id_string, sizeof(caller_id_string), "{origination_caller_id_number=%s}{origination_caller_id_name=%s}", config->info->caller_id, config->info->caller_id);    
+    }else{
+        *caller_id_string = 0;
+    }
+
+	if(config->info->api_cmd != NULL){
+        snprintf(api_string, sizeof(api_string), "%s", config->info->api_cmd);    
+    }else{
+        snprintf(api_string, sizeof(api_string), "&park");;
+    }
+
+    snprintf(call_string, sizeof(call_string), "bgapi originate %s%s%s%s %s", uuid_string, caller_id_string, codec_string, sip_string, api_string);
+    esl_log(ESL_LOG_INFO,"%s\n", call_string);
+    esl_send(config->handle, call_string);
+}
+
+sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phone_number, char *phone_prefix,  char *caller_id, char *domain, char *codec, char *api_cmd)
+{
+    //malloc config
+    sip_config_t config = malloc(sizeof(sip_config));
+    //init esl_handle
+    config->handle = malloc(sizeof(esl_handle_t));
+    memset(config->handle, 0, sizeof(esl_handle_t));
+    //init status call back function
+    config->status_cb = status_cb;
+    //init sip_info
+    config->info = (sip_info_t)malloc(sizeof(sip_info));
+    config->info->domain = string_malloc_copy(domain);  
+    config->info->codec = string_malloc_copy(codec);    
+    config->info->phone_number = string_malloc_copy(phone_number);
+    config->info->phone_prefix = string_malloc_copy(phone_prefix);
+    config->info->caller_id = string_malloc_copy(caller_id);
+    config->info->api_cmd = string_malloc_copy(api_cmd);
+    //init uuid
+    if(uuid != NULL){
+        config->uuid = string_malloc_copy(uuid);
+    }else{
+        char uuid_tmp[32];
+        generate_string(uuid_tmp, 30);
+        config->uuid = string_malloc_copy(uuid_tmp);
+        esl_log(ESL_LOG_INFO,"creat uuid[%s]\n",config->uuid);
+    }
+    //init play_list
+    config->play_list = new_link_list();
+    //log level init for test
+    esl_global_set_default_logger(ESL_LOG_LEVEL_INFO);
+    //esl connect
+    esl_status_t status = esl_connect(config->handle, "127.0.0.1", 8021, NULL, "ClueCon");
+    if (status != ESL_SUCCESS) {
+        esl_log(ESL_LOG_INFO, "Connect Error: %d\n", status);
+        return NULL;
+    }else{
+        esl_log(ESL_LOG_INFO, "Connected to FreeSWITCH\n");
+    }
+    esl_filter(config->handle, "unique-id", config->uuid);
+    esl_events(config->handle, ESL_EVENT_TYPE_PLAIN,  "ALL");
+    esl_log(ESL_LOG_INFO, "%s\n", config->handle->last_sr_reply);
+    return config;
+}
+
+void* play_thread(void *arg)
+{
+    sip_config_t config = (sip_config_t)arg;
+    struct timeval now;
+    int ready_flag = 0; 
+    char play_file[512];
+    esl_log(ESL_LOG_INFO, "play thread start ~ ~\n");
+    while(1)
+    {
+        if(config->answer_time.tv_sec)
+        {
+            if(ready_flag == 0){
+                gettimeofday(&now, NULL);
+                //esl_log(ESL_LOG_INFO, "now started time:[%d]((%d - %d)*1000 + (%d - %d)/1000)\n", 
+                //    timeval_sub(now, config->answer_time), now.tv_sec, config->answer_time.tv_sec, now.tv_usec, config->answer_time.tv_usec);
+                if(timeval_sub(now, config->answer_time) > 100){
+                    ready_flag = 1;
+                }else{
+                    usleep(5000);
+                }
+            }else{
+                if(config->play_list->size && !(*(config->playing_file_status.play_file_name)))
+                {
+                    esl_log(ESL_LOG_INFO, "there are [%d] files in play list , ready to play ~ ~\n", config->play_list->size);
+                    get_from_playlist(config, play_file);
+                    play_wav_file(play_file, config);
+                }
+                usleep(10000);
+            }
+        }else{
+            usleep(5000);
+        }
+    }
+
+    esl_log(ESL_LOG_INFO, "play thread ended ~ ~\n");
+    return 0;
+}
+
+
+void process_event(sip_config_t config, int *runflag)
+{
+    esl_handle_t *handle = config->handle;
+    char *uuid = config->uuid;
+    esl_event_t *event = config->handle->last_ievent;
+    char *this_uuid = esl_event_get_header(event, "Caller-Unique-ID");
+    char *play_file_name = NULL;
+    esl_log(ESL_LOG_INFO, "[%s]%s\n", this_uuid, esl_event_name(event->event_id));
+    /*
+    */
+    if(strcmp(uuid, this_uuid) == 0)
+    {
+        //esl_log(ESL_LOG_INFO, "[%s]%s\n", this_uuid, esl_event_name(event->event_id));
+        switch (event->event_id) {
+            case ESL_EVENT_CHANNEL_PARK:
+            {
+                break;
+            }
+            case ESL_EVENT_CHANNEL_EXECUTE:
+            {    	
+                break;
+            }
+            case ESL_EVENT_CHANNEL_EXECUTE_COMPLETE:
+            {      	
+                break;
+            }
+            case ESL_EVENT_CHANNEL_HANGUP_COMPLETE:
+           {
+                *runflag = 0;
+                break;
+           }
+            case ESL_EVENT_CHANNEL_ANSWER:
+           {
+                gettimeofday(&(config->answer_time), NULL);
+                esl_log(ESL_LOG_INFO, "channel answerd~~~~\n");
+                break;
+           }
+            case ESL_EVENT_PLAYBACK_START:
+           {
+                play_file_name = esl_event_get_header(event, "variable_current_application_data");
+                esl_log(ESL_LOG_INFO, "play [%s] start~ ~ ~\n", play_file_name);
+
+                //修改playing_file_status状态标记{{
+                gettimeofday(&(config->playing_file_status.play_start_time), NULL);
+                config->playing_file_status.play_file_length_ms = get_wav_time_length(config->playing_file_status.play_file_name);
+                //}}
+
+                //break_playing_file(config, 7000);//test break
+                break;
+           }
+            case ESL_EVENT_PLAYBACK_STOP:
+           {
+                reset_playing_file_status(config);
+                play_file_name = esl_event_get_header(event, "variable_current_application_data");
+                esl_log(ESL_LOG_INFO, "play [%s] end~ ~ ~\n", play_file_name);
+                break;
+           }
+            case ESL_EVENT_RECORD_START:
+           {
+                break;
+           }
+            case ESL_EVENT_RECORD_STOP:
+           {
+                break;
+           }              
+            case ESL_EVENT_CHANNEL_STATE:
+           {
+                break;
+           }   
+
+            default:
+
+                break;
+        }
+    }
+}
+
+int main(void)
+{
+	
+    /*
+    esl_events(&handle, ESL_EVENT_TYPE_PLAIN,
+        "SESSION_HEARTBEAT CHANNEL_ANSWER CHANNEL_ORIGINATE CHANNEL_PROGRESS CHANNEL_HANGUP "
+			   "CHANNEL_BRIDGE CHANNEL_UNBRIDGE CHANNEL_OUTGOING CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE DTMF ");
+    */
+   
+    
+    esl_status_t status;
+    int runflag = 1;
+    sip_config_t config = sip_config_init( NULL,  NULL, "1004", NULL, "123", NULL, NULL, NULL);
+    //sip_config_t config = sip_config_init( NULL,  NULL, "13053075601", NULL, "123", "192.168.11.80", NULL, NULL);
+    char play_file[512];
+    struct timeval now;
+    int answer_time_flag = 0;
+
+    pthread_t g_pid_play = {0};
+
+    make_call(config);
+
+    config->handle->event_lock = 1;
+    //test list{{
+    add_to_playlist("/opt/swmy.wav", config, 1, 0);
+    esl_log(ESL_LOG_INFO, "size:%d\n",config->play_list->size);
+    get_from_playlist(config, play_file);
+    esl_log(ESL_LOG_INFO, "size:%d, play_file:%s\n", config->play_list->size, play_file);
+    //}}
+    add_to_playlist("/opt/swmy.wav", config, 1, 0);
+
+    /*创建语音文件播放线程*/
+    if (0 != pthread_create(&g_pid_play, NULL, (void *)&play_thread, config)){
+        // log_error("create play thread error:%s(errno:%d)", strerror(errno), errno);
+        // yfs_media_thread_quit();
+        // pthread_join(g_pid_capture, NULL);
+        // SAFE_FERR_ASR_HANDLE(asr_handle);
+        // event_queue_uninit(&media_event_queu);
+        return -1;
+    }
+
+    //pthread_join(g_pid_play, NULL);
+
+    while(runflag && (status = esl_recv_event(config->handle, 1, NULL)) == ESL_SUCCESS) {
+               
+        if (config->handle->last_ievent) {
+            process_event(config, &runflag);
+        }
+	}
+
+end:
+
+	esl_disconnect(config->handle);
+    /*
+    */
+	return 0;
+}
