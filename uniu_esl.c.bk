@@ -5,24 +5,10 @@
 #include "uniu_list.h"
 #include "uniu_esl.h"
 
-/*
-*@Destription:generate random string 
-*@param:str ; where string save to
-*@param:length; length of random string
-*@return: success:0  fild:-1
-*/
-int generate_string(char *str, int length)
+char *generate_string(char *str, int length)
 {
     register int i,flag;
-    if(str == NULL){
-        esl_log(ESL_LOG_ERROR,"str is NULL !\n");
-        return  -1;
-    }
-    if(length <= 0){
-        esl_log(ESL_LOG_ERROR,"length is 0 !\n");
-        *str = 0;
-        return -1;
-    }
+     
     srand(time(NULL));//通过时间函数设置随机数种子，使得每次运行结果随机。
     for(i = 0; i < length; i ++)
     {
@@ -41,14 +27,11 @@ int generate_string(char *str, int length)
 		}
     }
     str[i] = 0;
-    esl_log(ESL_LOG_INFO,"%s\n", str);//打印生成的随机数。     
-    return 0;
+    esl_log(ESL_LOG_INFO,"%s\n", str);//输出生成的随机数。
+     
+    return str;
 }
-/*
-*@Destription:malloc a string ,and copy src to it
-*@param:src;
-*@return: success:dst  faild:NULL
-*/
+
 inline char *string_malloc_copy(char *src)
 {
     register int i;
@@ -58,25 +41,16 @@ inline char *string_malloc_copy(char *src)
     }
     int length = strlen(src);
     char *dst = (char *)malloc(length + 1);
-    if(dst == NULL){
-        esl_log(ESL_LOG_ERROR, "MALLOC FAILD ~~ \n");
-        return NULL;
-    }
     for(i = 0; i < length; i++)
     {
         dst[i] = *src++;
     }
     dst[i] = 0;
-    return dst;    
+    return dst;
+    
 }
 
-/*@Description: Add file to play_list 将音频文件加入到播放列表中
-*@param:file_name ; what adding into list
-*@param:config ; uniu config
-*@param:if_last ; if add into last or first
-*@pfaram:if_clean; if clean play_list
-*@return: success:0 error:-1
-*/
+//将音频文件加入到播放列表中
 int add_to_playlist(char *file_name, sip_config_t config, int if_last, int if_clean)
 {
     link_t play_list = config->play_list;
@@ -85,7 +59,7 @@ int add_to_playlist(char *file_name, sip_config_t config, int if_last, int if_cl
         play_list = new_link_list();
     }
     if(file_name == NULL){
-        esl_log(ESL_LOG_ERROR, "file_name is NULL\n");
+        esl_log(ESL_LOG_INFO, "file_name is NULL\n");
         return -1;
     }
     if(if_clean){
@@ -95,7 +69,7 @@ int add_to_playlist(char *file_name, sip_config_t config, int if_last, int if_cl
     char *file = string_malloc_copy(file_name);
     esl_log(ESL_LOG_INFO, "file:%s\n",file);
     if(file == NULL){
-        esl_log(ESL_LOG_ERROR, "file_name malloc error,exit!\n");
+        esl_log(ESL_LOG_INFO, "file_name malloc error,exit!\n");
         return -1;
     }
     if(if_last){
@@ -106,27 +80,8 @@ int add_to_playlist(char *file_name, sip_config_t config, int if_last, int if_cl
     return 0;
 }
 
-/*@Destription compute the sub of two timeval (t1 - t2 ,return  n ms)
-*/
-inline int timeval_sub(struct timeval t1, struct timeval t2)
-{
-    return ((t1.tv_sec - t2.tv_sec) * 1000000 + t1.tv_usec - t2.tv_usec) / 1000;
-}
-
-/*
-*Description:get file from the head of play_list, remove it from list and free it 
-*param:config
-*param:play_file_name, the file we get
-*return:success: file_name fail:NULL
-*/
 char *get_from_playlist(sip_config_t config, char *play_file_name)
 {
-
-    if(!config->play_list->size){
-        esl_log(ESL_LOG_ERROR, "none file in list\n");
-        play_file_name = NULL;
-        return NULL;
-    }
     char *value = link_list_get(config->play_list, 0);
     if(value != NULL){
         sprintf(play_file_name, "%s", value);
@@ -138,11 +93,7 @@ char *get_from_playlist(sip_config_t config, char *play_file_name)
     return play_file_name;
 }
 
-/*
-*@Description: 获取wav文件的时长，单位：毫秒
-*@param:file_name: what file we compute
-*@retrun success:wav time length of wav file; faild: -1  
-*/
+// 获取wav文件的时长，单位：毫秒
 double get_wav_time_length(char* file_name)
 {
 	double len = 0.0;
@@ -164,72 +115,38 @@ double get_wav_time_length(char* file_name)
 			fp = NULL;
  
 			len = (double)j*1000/(double)i;
-		}else{
-            esl_log(ESL_LOG_ERROR, "file[%S] open faild\n", file_name);
-            return -1;
-        }
+		}
 	}
  
 	return len;
 }
 
+/*return  n ms*/
+inline int timeval_sub(struct timeval t1, struct timeval t2)
+{
+    return ((t1.tv_sec - t2.tv_sec) * 1000000 + t1.tv_usec - t2.tv_usec) / 1000;
+}
+
 int play_wav_file(char *file_name, sip_config_t config)
 {
-    esl_log(ESL_LOG_INFO, "[%s]in play wav file function", file_name);
+    snprintf(config->playing_file_status.play_file_name, sizeof(config->playing_file_status.play_file_name), "%s", file_name);
     esl_execute(config->handle, "playback", file_name, config->uuid);
+    //gettimeofday(&(config->playing_file_status.play_start_time), NULL);
+    //config->playing_file_status.play_file_length_ms = get_wav_time_length(file_name);
     return 0;
 }
 
-/*
-*@Destription:设置正在拨打的音频状态
-*@param:file_name:拨打的文件名
-*@param:config
-*@return: success:0  fail:-1
-*/
-inline int set_playing_file_status(char *file_name, sip_config_t config)
-{
-    if(file_name == NULL){
-        esl_log(ESL_LOG_ERROR, "file_name is NULL");
-        return -1;
-    }
-    if(config == NULL){
-        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
-        return -1;
-    }
-    sprintf(config->playing_file_status.play_file_name, "%s", file_name);
-    gettimeofday(&(config->playing_file_status.play_start_time), NULL);
-    config->playing_file_status.play_file_length_ms = get_wav_time_length(config->playing_file_status.play_file_name);
-    return 0;
-}
-
-/*
-*@Destription:将正在拨打的音频重置掉
-*@param:config
-*@return: success:0  fail:-1
-*/
+//将正在拨打的音频重置掉
 int reset_playing_file_status(sip_config_t config)
 {
-    if(config == NULL){
-        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
-        return -1;
-    }
     *(config->playing_file_status.play_file_name) = 0;
     config->playing_file_status.play_file_length_ms = 0;
     return 0;
 }
 
-/*
-*@Destription:when playing file last time less than protect(ms), clean play list, else, break it and clean play list
-*@param:config;
-*@protect:protect time (ms) of  playing file
-*@return: success:0  fail :-1
-*/
+//when playing file last time less than protect(ms), clean play list, else, break it and clean play list
 int break_playing_file(sip_config_t config, int protect)
 {
-    if(config == NULL){
-        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
-        return -1;
-    }
     char cmd_str[256];
     struct timeval now;
     gettimeofday(&now,NULL);
@@ -251,17 +168,12 @@ int break_playing_file(sip_config_t config, int protect)
     return 0;
 }
 
-/*
-*@Destription:make a call (get info from  config)
-*@param:config;
-*@return: success:0  fail :-1
-*/
 int make_call(sip_config_t config)
 {
     char call_string[1024];
     char sip_string[128];  //example: sip:1001@192.168.1.1:5060  or  user/1001
     char uuid_string[128];
-    char uuid_generate[64];
+    char uuid_generate[256];
     char codec_string[64];
 	char api_string[512];
     char caller_id_string[128];  
@@ -282,10 +194,9 @@ int make_call(sip_config_t config)
     if(config->uuid != NULL){
         snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", config->uuid);
     }else{
-        esl_log(ESL_LOG_ERROR,"None uuid\n");
-        generate_string(uuid_generate, 16);
-        snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", uuid_generate);
-        esl_log(ESL_LOG_INFO,"create uuid[%s]\n",uuid_generate);
+        //generate_string(uuid_generate, 10);
+        //snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", uuid_generate);
+        esl_log(ESL_LOG_INFO,"[ERROR]None uuid\n");
 
     }
 
@@ -304,21 +215,8 @@ int make_call(sip_config_t config)
     snprintf(call_string, sizeof(call_string), "bgapi originate %s%s%s%s %s", uuid_string, caller_id_string, codec_string, sip_string, api_string);
     esl_log(ESL_LOG_INFO,"%s\n", call_string);
     esl_send(config->handle, call_string);
-
-    return 0;
 }
-/*
-*@Description:init sip_config_t
-*@param:status_cb:状态回调结构体
-*@param:uuid:指定uuid字符串，若为NULL则程序会自动生成
-*@param:phone_number:被叫号码
-*@param:phome_prefix:被叫号码前缀
-*@param:caller_id:主叫号码
-*@param:domain:目的线路域名
-*@param:codec:采用的sip编码，如 G722\G729\PCMU\PCMA, 默认为空，即协商解决
-*@param:api_cmd:采用的呼叫命令，如&echo等， 默认未&park
-*@return: success:sip_config_t faild:NULL
-*/
+
 sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phone_number, char *phone_prefix,  char *caller_id, char *domain, char *codec, char *api_cmd)
 {
     //malloc config
@@ -362,50 +260,15 @@ sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phon
     esl_log(ESL_LOG_INFO, "%s\n", config->handle->last_sr_reply);
     return config;
 }
-/*
-*@Destription:从列表头部获取音频文件并播放
-*@config;
-*@return: success:0 fail:-1
-*/
-int play_form_list(sip_config_t config)
-{
-    if(config == NULL){
-        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
-        return -1;
-    }
-    char play_file[512];
-    if(config->play_list->size)
-    {
-            esl_log(ESL_LOG_INFO, "there are [%d] files in play list , uuid[%s], ready to play ~ ~\n", config->play_list->size, config->uuid);
-            get_from_playlist(config, play_file);
-            esl_log(ESL_LOG_INFO, "get file [%s] from play list ~ \n", play_file);
-            play_wav_file(play_file, config);
-    }
-    return 0;
-}
 
-void* play_thread(void *arg)
-{
-    sip_config_t config = (sip_config_t)arg;
-    esl_log(ESL_LOG_INFO, "play thread start ~ ~\n");
-    while(1)
-    {
-        play_form_list(config);
-        usleep(5000);
-    }
-    
-    esl_log(ESL_LOG_INFO, "play thread ended ~ ~\n");
-    return 0;
-}
-
-void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
+void process_event(sip_config_t config, int *runflag)
 {
     esl_handle_t *handle = config->handle;
     char *uuid = config->uuid;
     esl_event_t *event = config->handle->last_ievent;
     char *this_uuid = esl_event_get_header(event, "Caller-Unique-ID");
     char *play_file_name = NULL;
-    //esl_log(ESL_LOG_INFO, "[%s]%s\n", this_uuid, esl_event_name(event->event_id));
+    esl_log(ESL_LOG_INFO, "[%s]%s\n", this_uuid, esl_event_name(event->event_id));
     /*
     */
     if(strcmp(uuid, this_uuid) == 0)
@@ -414,10 +277,9 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
         switch (event->event_id) {
             case ESL_EVENT_CHANNEL_PARK:
             {
-                // gettimeofday(&(config->answer_time), NULL);
+                gettimeofday(&(config->answer_time), NULL);
                 esl_log(ESL_LOG_INFO, "channel parked~~~~\n");
-                // esl_execute(config->handle, "playback", "/opt/ninhao.wav", config->uuid);   
-                // pthread_create(pid_play, NULL, (void *)&play_thread, config);             
+                esl_execute(config->handle, "playback", "/opt/ninhao.wav", config->uuid);                
                 //esl_execute(config->handle, "hangup", NULL, config->uuid);
                 break;
             }
@@ -436,13 +298,6 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
            }
             case ESL_EVENT_CHANNEL_ANSWER:
            {
-                gettimeofday(&(config->answer_time), NULL);
-                esl_log(ESL_LOG_INFO, "channel answered~~~~\n");
-                //sleep(1);
-                //play_form_list(config);
-                esl_execute(config->handle, "playback", "silence_stream://800,1400", config->uuid);  
-
-                pthread_create(pid_play, NULL, (void *)&play_thread, config);  
                /*
                 gettimeofday(&(config->answer_time), NULL);
                 esl_log(ESL_LOG_INFO, "channel answerd~~~~\n");
@@ -457,8 +312,9 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
                 play_file_name = esl_event_get_header(event, "variable_current_application_data");
                 esl_log(ESL_LOG_INFO, "play [%s] start~ ~ ~\n", play_file_name);
 
-                //修改playing_file_status状态标记{{    
-                set_playing_file_status(play_file_name, config);
+                //修改playing_file_status状态标记{{
+                gettimeofday(&(config->playing_file_status.play_start_time), NULL);
+                config->playing_file_status.play_file_length_ms = get_wav_time_length(config->playing_file_status.play_file_name);
                 //}}
 
                 //break_playing_file(config, 7000);//test break
@@ -493,19 +349,66 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
     }
 }
 
-
+void* play_thread(void *arg)
+{
+    sip_config_t config = (sip_config_t)arg;
+    struct timeval now;
+    int ready_flag = 0; 
+    char play_file[512];
+    esl_log(ESL_LOG_INFO, "play thread start ~ ~\n");
+    sleep(3);
+    
+    esl_execute(config->handle, "playback", "/opt/swmy.wav", config->uuid);
+    //esl_execute(config->handle, "hangup", NULL, config->uuid);
+    /*
+    while(1)
+    {
+        if(config->answer_time.tv_sec)
+        {
+            if(ready_flag == 0){
+                gettimeofday(&now, NULL);
+                //esl_log(ESL_LOG_INFO, "now started time:[%d]((%d - %d)*1000 + (%d - %d)/1000)\n", 
+                //    timeval_sub(now, config->answer_time), now.tv_sec, config->answer_time.tv_sec, now.tv_usec, config->answer_time.tv_usec);
+                if(timeval_sub(now, config->answer_time) > 2000){
+                    ready_flag = 1;
+                }else{
+                    usleep(5000);
+                }
+            }else{
+                
+            }
+        }else{
+            usleep(5000);
+        }
+    }
+    */
+    while(1)
+    {
+        if(config->play_list->size && !(*(config->playing_file_status.play_file_name)))
+        {
+            esl_log(ESL_LOG_INFO, "there are [%d] files in play list , uuid[%s], ready to play ~ ~\n", config->play_list->size, config->uuid);
+            get_from_playlist(config, play_file);
+            esl_log(ESL_LOG_INFO, "get file [%s] from play list ~ \n", play_file);
+            play_wav_file(play_file, config);
+            esl_execute(config->handle, "hangup", NULL, config->uuid);
+        }
+       // usleep(5000);
+    }
+    
+    esl_log(ESL_LOG_INFO, "play thread ended ~ ~\n");
+    return 0;
+}
 
 void* event_listen_thread(void *arg)
 {
     esl_status_t status;
-    pthread_t pid_play = {0};
     sip_config_t config = (sip_config_t)arg;
     int runflag = 1;
     
     while(runflag && (status = esl_recv_event(config->handle, 1, NULL)) == ESL_SUCCESS) {
              
         if (config->handle->last_ievent) {
-            process_event(config, &runflag, &pid_play);
+            process_event(config, &runflag);
         }
 	}
     esl_log(ESL_LOG_INFO, "event listen thread ended ~ ~\n");
@@ -528,6 +431,7 @@ int main(void)
     struct timeval now;
     int answer_time_flag = 0;
 
+    pthread_t pid_play = {0};
     pthread_t pid_listen = {0};
 
     make_call(config);
@@ -545,7 +449,7 @@ int main(void)
 
     /*创建语音文件播放线程*/
     /*
-    
+    */
     if (0 != pthread_create(&pid_play, NULL, (void *)&play_thread, config)){
         // log_error("create play thread error:%s(errno:%d)", strerror(errno), errno);
         // yfs_media_thread_quit();
@@ -554,7 +458,7 @@ int main(void)
         // event_queue_uninit(&media_event_queu);
         return -1;
     }
-    */
+
     pthread_join(pid_listen, NULL);
 
 
