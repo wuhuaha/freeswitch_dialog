@@ -172,9 +172,22 @@ double get_wav_time_length(char* file_name)
  
 	return len;
 }
-
+/*
+*@Destription:播放指定的文件
+*@param:file_name:文件名
+*@param:config
+*@return: success:0 fail:-1
+*/
 int play_wav_file(char *file_name, sip_config_t config)
 {
+    if(file_name == NULL){
+        esl_log(ESL_LOG_ERROR, "file_name is NULL");
+        return -1;
+    }
+    if(config == NULL){
+        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
+        return -1;
+    }
     esl_log(ESL_LOG_INFO, "[%s]in play wav file function", file_name);
     esl_execute(config->handle, "playback", file_name, config->uuid);
     return 0;
@@ -317,9 +330,11 @@ int make_call(sip_config_t config)
 *@param:domain:目的线路域名
 *@param:codec:采用的sip编码，如 G722\G729\PCMU\PCMA, 默认为空，即协商解决
 *@param:api_cmd:采用的呼叫命令，如&echo等， 默认未&park
+*@param:record_path:录音路径
+*@param:record_file_name:完整录音的录音文件名
 *@return: success:sip_config_t faild:NULL
 */
-sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phone_number, char *phone_prefix,  char *caller_id, char *domain, char *codec, char *api_cmd)
+sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phone_number, char *phone_prefix,  char *caller_id, char *domain, char *codec, char *api_cmd, char *record_path, char *record_file_name)
 {
     //malloc config
     sip_config_t config = malloc(sizeof(sip_config));
@@ -336,6 +351,8 @@ sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phon
     config->info->phone_prefix = string_malloc_copy(phone_prefix);
     config->info->caller_id = string_malloc_copy(caller_id);
     config->info->api_cmd = string_malloc_copy(api_cmd);
+    config->info->record_path = string_malloc_copy(record_path);
+    config->info->record_file_name = string_malloc_copy(record_file_name);
     //init uuid
     if(uuid != NULL){
         config->uuid = string_malloc_copy(uuid);
@@ -384,10 +401,52 @@ int play_form_list(sip_config_t config)
     return 0;
 }
 
+/*
+*@Destription:进行录音
+*@config;
+*@return: success:0 fail:-1
+*/
+int record_call(sip_config_t config)
+{
+    char record_file[1024];
+    if(config == NULL){
+        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
+        return -1;
+    }
+    if(config->info->record_path == NULL){
+        config->info->record_path = string_malloc_copy("/home/record_path");
+        esl_log(ESL_LOG_INFO, "record_path is NULL,so we generate it to[%s]\n", config->info->record_path);
+    }
+    if(config->info->record_file_name == NULL){
+        snprintf(record_file, 1024, "%s.wav", config->uuid);
+        config->info->record_file_name = string_malloc_copy(record_file);
+        esl_log(ESL_LOG_INFO, "record_file_name is NULL,so we generate it to[%s]\n", config->info->record_file_name);
+    }
+    if(*(config->info->record_path + strlen(config->info->record_path) - 1 ) == '/'){
+        snprintf(record_file, 1024, "%s%s", config->info->record_path, config->info->record_file_name);
+    }else{
+        snprintf(record_file, 1024, "%s/%s", config->info->record_path, config->info->record_file_name);
+    }
+    esl_execute(config->handle, "mkdir", config->info->record_path, config->uuid);
+    esl_log(ESL_LOG_INFO, "record_file_name is %s\n", record_file);
+    esl_execute(config->handle, "record_session", record_file, config->uuid);
+    return 0;
+}
+
 void* play_thread(void *arg)
 {
     sip_config_t config = (sip_config_t)arg;
     esl_log(ESL_LOG_INFO, "play thread start ~ ~\n");
+    struct timeval now;
+    while(1)
+    {
+        gettimeofday(&now, NULL);
+        if(timeval_sub(now, config->answer_time) < 1000 ){
+            usleep(5000);
+        }else{
+            break;
+        }
+    }
     while(1)
     {
         play_form_list(config);
@@ -438,9 +497,11 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
            {
                 gettimeofday(&(config->answer_time), NULL);
                 esl_log(ESL_LOG_INFO, "channel answered~~~~\n");
-                //sleep(1);
+                sleep(1);
                 //play_form_list(config);
-                esl_execute(config->handle, "playback", "silence_stream://800,1400", config->uuid);  
+                esl_execute(config->handle, "playback", "silence_stream://800,1400", config->uuid);
+                //esl_execute(config->handle, "record_session", "/home/record_path/test.wav", config->uuid); 
+                record_call(config); 
 
                 pthread_create(pid_play, NULL, (void *)&play_thread, config);  
                /*
@@ -493,8 +554,6 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
     }
 }
 
-
-
 void* event_listen_thread(void *arg)
 {
     esl_status_t status;
@@ -522,8 +581,8 @@ int main(void)
     */
    
     
-    sip_config_t config = sip_config_init( NULL,  NULL, "1004", NULL, "123", NULL, NULL, NULL);
-    //sip_config_t config = sip_config_init( NULL,  NULL, "13053075601", NULL, "123", "192.168.11.81", NULL, NULL);
+    //sip_config_t config = sip_config_init( NULL,  NULL, "1004", NULL, "123", NULL, NULL, NULL, "/root/record_path", "test1.wav");
+    sip_config_t config = sip_config_init( NULL,  NULL, "13053075601", NULL, "123", "192.168.11.81", NULL, NULL, NULL, NULL);
     char play_file[512];
     struct timeval now;
     int answer_time_flag = 0;
@@ -533,12 +592,7 @@ int main(void)
     make_call(config);
 
     config->handle->event_lock = 1;
-    //test list{{
-    add_to_playlist("/opt/swmy.wav", config, 1, 0);
-    esl_log(ESL_LOG_INFO, "size:%d\n",config->play_list->size);
-    get_from_playlist(config, play_file);
-    esl_log(ESL_LOG_INFO, "size:%d, play_file:%s\n", config->play_list->size, play_file);
-    //}}
+  
     add_to_playlist("/opt/swmy.wav", config, 1, 0);
 
     pthread_create(&pid_listen, NULL, (void *)&event_listen_thread, config);

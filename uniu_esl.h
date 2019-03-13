@@ -41,6 +41,8 @@ typedef struct
     //注：可选项： [G722 , OPUS, PCMU,  PCMA,  G729]；
     char *codec;//采用的编码  如"G722"
     char *api_cmd;//呼叫后执行的api 用法1：默认为&park,然后可以调用client函数监听并操作； 用法2：指定目的server，然后在server端处理后续通话
+    char *record_path;
+    char *record_file_name;
 } sip_info;
 
 typedef sip_info * sip_info_t;
@@ -79,7 +81,6 @@ typedef struct
     char *uuid; //本通电话的特征识别码
     link_t play_list;//播放链表
     play_status playing_file_status;
-    char record_path[512];
     active_stauts if_active;
     struct timeval answer_time;
 } sip_config;
@@ -96,7 +97,7 @@ int play_wav_file(char *file_name,  sip_config_t config);
 
 int make_call(sip_config_t config);
 
-sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phone_number, char *phone_prefix,  char *caller_id, char *domain, char *codec, char *api_cmd);
+sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phone_number, char *phone_prefix,  char *caller_id, char *domain, char *codec, char *api_cmd, char *record_path, char *record_file_name);
 
 //when playing file last time less than protect(ms), clean play list, else, break it and clean play list
 int break_playing_file(sip_config_t config, int protect);
