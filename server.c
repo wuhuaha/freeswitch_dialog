@@ -116,7 +116,7 @@ again:
             break;
         default:
 			//esl_execute(handle, "answer", NULL, uuid);
-			esl_execute(handle, "playback", "/opt/swmy.wav", uuid);
+			//esl_execute(handle, "playback", "/opt/swmy.wav", uuid);
 			esl_log(ESL_LOG_INFO, "[%s]%s\n", uuid, esl_event_name(event->event_id));
             break;
     }

@@ -5,6 +5,7 @@
 #include "uniu_list.h"
 #include "uniu_esl.h"
 
+//{辅助性独立工具函数，与系统逻辑无关
 /*
 *@Destription:generate random string 
 *@param:str ; where string save to
@@ -70,80 +71,12 @@ inline char *string_malloc_copy(char *src)
     return dst;    
 }
 
-/*@Description: Add file to play_list 将音频文件加入到播放列表中
-*@param:file_name ; what adding into list
-*@param:config ; uniu config
-*@param:if_last ; if add into last or first
-*@pfaram:if_clean; if clean play_list
-*@return: success:0 error:-1
-*/
-int add_to_playlist(char *file_name, sip_config_t config, int if_last, int if_clean)
-{
-    link_t play_list = config->play_list;
-    if(play_list == NULL){
-        esl_log(ESL_LOG_INFO, "play_list is not init!now init it~\n");
-        play_list = new_link_list();
-    }
-    if(file_name == NULL){
-        esl_log(ESL_LOG_ERROR, "file_name is NULL\n");
-        return -1;
-    }
-    if(if_clean){
-        link_list_clear_free(play_list);
-        esl_log(ESL_LOG_INFO, "clear and free all node in the play_list\n"); 
-    }
-    char *file = string_malloc_copy(file_name);
-    esl_log(ESL_LOG_INFO, "file:%s\n",file);
-    if(file == NULL){
-        esl_log(ESL_LOG_ERROR, "file_name malloc error,exit!\n");
-        return -1;
-    }
-    if(if_last){
-        link_list_add_last(play_list, file);
-    }else{
-        link_list_add_first(play_list, file);
-    }
-    return 0;
-}
-
-/*@Destription compute the sub of two timeval (t1 - t2 ,return  n ms)
-*/
-inline int timeval_sub(struct timeval t1, struct timeval t2)
-{
-    return ((t1.tv_sec - t2.tv_sec) * 1000000 + t1.tv_usec - t2.tv_usec) / 1000;
-}
-
-/*
-*Description:get file from the head of play_list, remove it from list and free it 
-*param:config
-*param:play_file_name, the file we get
-*return:success: file_name fail:NULL
-*/
-char *get_from_playlist(sip_config_t config, char *play_file_name)
-{
-
-    if(!config->play_list->size){
-        esl_log(ESL_LOG_ERROR, "none file in list\n");
-        play_file_name = NULL;
-        return NULL;
-    }
-    char *value = link_list_get(config->play_list, 0);
-    if(value != NULL){
-        sprintf(play_file_name, "%s", value);
-        SAFE_FREE(value);
-    }else{
-        play_file_name = NULL;
-    }
-    link_list_remove_first(config->play_list);
-    return play_file_name;
-}
-
 /*
 *@Description: 获取wav文件的时长，单位：毫秒
 *@param:file_name: what file we compute
 *@retrun success:wav time length of wav file; faild: -1  
 */
-double get_wav_time_length(char* file_name)
+inline double get_wav_time_length(char* file_name)
 {
 	double len = 0.0;
  
@@ -172,13 +105,83 @@ double get_wav_time_length(char* file_name)
  
 	return len;
 }
+
+/*@Destription compute the sub of two timeval (t1 - t2 ,return  n ms)
+*/
+inline int timeval_sub(struct timeval t1, struct timeval t2)
+{
+    return ((t1.tv_sec - t2.tv_sec) * 1000000 + t1.tv_usec - t2.tv_usec) / 1000;
+}
+
+//}}
+
+
+//{{  基础操作函数，包括拨打电话、播放wav文件、开始录音
+
+/*
+*@Destription:make a call (get info from  config)
+*@param:config;
+*@return: success:0  fail :-1
+*/
+int make_call(sip_config_t config)
+{
+    char call_string[1024];
+    char sip_string[128];  //example: sip:1001@192.168.1.1:5060  or  user/1001
+    char uuid_string[128];
+    char uuid_generate[64];
+    char codec_string[64];
+	char api_string[512];
+    char caller_id_string[128];  
+
+	//标准化sip_string为标准格式，在有domain时使用domain呼叫，否则认为是本机注册用户
+    if( config->info->domain != NULL){
+        snprintf(sip_string, sizeof(sip_string), "sofia/external/sip:%s%s@%s", (config->info->phone_prefix == NULL ? "" : config->info->phone_prefix), config->info->phone_number, config->info->domain);
+    }else{
+        snprintf(sip_string, sizeof(sip_string), "user/%s%s", (config->info->phone_prefix == NULL ? "" : config->info->phone_prefix), config->info->phone_number);
+    }
+
+    if(config->info->codec != NULL){
+        snprintf(codec_string, sizeof(codec_string), "{absolute_codec_string=%s}", config->info->codec);    
+    }else{
+        *codec_string = 0;
+    }
+
+    if(config->uuid != NULL){
+        snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", config->uuid);
+    }else{
+        esl_log(ESL_LOG_ERROR,"None uuid\n");
+        generate_string(uuid_generate, 16);
+        snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", uuid_generate);
+        esl_log(ESL_LOG_INFO,"create uuid[%s]\n",uuid_generate);
+
+    }
+
+    if(config->info->caller_id != NULL){
+        snprintf(caller_id_string, sizeof(caller_id_string), "{origination_caller_id_number=%s}{origination_caller_id_name=%s}", config->info->caller_id, config->info->caller_id);    
+    }else{
+        *caller_id_string = 0;
+    }
+
+	if(config->info->api_cmd != NULL){
+        snprintf(api_string, sizeof(api_string), "%s", config->info->api_cmd);    
+    }else{
+        snprintf(api_string, sizeof(api_string), "&park");;
+    }
+
+    snprintf(call_string, sizeof(call_string), "bgapi originate %s%s%s%s %s", uuid_string, caller_id_string, codec_string, sip_string, api_string);
+    esl_log(ESL_LOG_INFO,"%s\n", call_string);
+    esl_send(config->handle, call_string);
+
+    return 0;
+}
+
 /*
 *@Destription:播放指定的文件
 *@param:file_name:文件名
 *@param:config
 *@return: success:0 fail:-1
 */
-int play_wav_file(char *file_name, sip_config_t config)
+inline int play_wav_file(char *file_name, sip_config_t config)
 {
     if(file_name == NULL){
         esl_log(ESL_LOG_ERROR, "file_name is NULL");
@@ -192,6 +195,63 @@ int play_wav_file(char *file_name, sip_config_t config)
     esl_execute(config->handle, "playback", file_name, config->uuid);
     return 0;
 }
+
+/*
+*@Destription:播放指定时长的静音
+*@param:play_silence_time_ms:播放静音的时长
+*@param:config
+*@return: success:0 fail:-1
+*/
+inline int play_silence(int play_silence_time_ms, sip_config_t config)
+{
+	if(config == NULL){
+        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
+        return -1;
+    }
+	char play_silence_cmd[63];
+	snprintf(play_silence_cmd, strlen(play_silence_cmd), "silence_stream://%d", play_silence_time_ms);
+    esl_log(ESL_LOG_INFO, "play [%d]ms silence stream\n", play_silence_time_ms);
+    esl_execute(config->handle, "playback", play_silence_cmd, config->uuid);
+    return 0;
+}
+
+/*
+*@Destription:进行录音
+*@config;
+*@return: success:0 fail:-1
+*/
+int record_call(sip_config_t config)
+{
+    char record_file[1024];
+    if(config == NULL){
+        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
+        return -1;
+    }
+    if(config->info->record_path == NULL){
+        config->info->record_path = string_malloc_copy("/home/record_path");
+        esl_log(ESL_LOG_INFO, "record_path is NULL,so we generate it to[%s]\n", config->info->record_path);
+    }
+    if(config->info->record_file_name == NULL){
+        snprintf(record_file, 1024, "%s.wav", config->uuid);
+        config->info->record_file_name = string_malloc_copy(record_file);
+        esl_log(ESL_LOG_INFO, "record_file_name is NULL,so we generate it to[%s]\n", config->info->record_file_name);
+    }
+    if(*(config->info->record_path + strlen(config->info->record_path) - 1 ) == '/'){
+        snprintf(record_file, 1024, "%s%s", config->info->record_path, config->info->record_file_name);
+    }else{
+        snprintf(record_file, 1024, "%s/%s", config->info->record_path, config->info->record_file_name);
+    }
+    esl_execute(config->handle, "mkdir", config->info->record_path, config->uuid);
+    esl_log(ESL_LOG_INFO, "record_file_name is %s\n", record_file);
+    esl_execute(config->handle, "record_session", record_file, config->uuid);
+    return 0;
+}
+
+//}}
+
+
+//{{ 当前拨打状态（包括正在播放的音频文件名、文件大小、播放开始时间等）调整维护相关函数；
+//   包含：设置拨打状态、重置拨打状态、打断当前播放的文件
 
 /*
 *@Destription:设置正在拨打的音频状态
@@ -256,70 +316,121 @@ int break_playing_file(sip_config_t config, int protect)
         esl_send_recv(config->handle, cmd_str); 
         esl_log(ESL_LOG_INFO, "break playing file[%s]\n",config->playing_file_status.play_file_name);
         esl_log(ESL_LOG_INFO, "%s\n",config->handle->last_sr_reply);
-        *(config->playing_file_status.play_file_name) = 0;
-        config->playing_file_status.play_file_length_ms = 0;
+        reset_playing_file_status(config);
     }
     link_list_clear_free(config->play_list);
     esl_log(ESL_LOG_INFO, "clear and free all node in the play_list\n"); 
     return 0;
 }
 
-/*
-*@Destription:make a call (get info from  config)
-*@param:config;
-*@return: success:0  fail :-1
+//}}
+
+
+//{{播放列表维护和取出相关函数；包括：音频文件加入链表、从链表取出文件、清空链表
+
+/*@Description: Add file to play_list 将音频文件加入到播放列表中
+*@param:file_name ; what adding into list
+*@param:config ; uniu config
+*@param:if_last ; if add into last or first
+*@pfaram:if_clean; if clean play_list
+*@return: success:0 error:-1
 */
-int make_call(sip_config_t config)
+int add_to_playlist(char *file_name, sip_config_t config, int if_last, int if_clean)
 {
-    char call_string[1024];
-    char sip_string[128];  //example: sip:1001@192.168.1.1:5060  or  user/1001
-    char uuid_string[128];
-    char uuid_generate[64];
-    char codec_string[64];
-	char api_string[512];
-    char caller_id_string[128];  
-
-	//标准化sip_string为标准格式，在有domain时使用domain呼叫，否则认为是本机注册用户
-    if( config->info->domain != NULL){
-        snprintf(sip_string, sizeof(sip_string), "sofia/external/sip:%s%s@%s", (config->info->phone_prefix == NULL ? "" : config->info->phone_prefix), config->info->phone_number, config->info->domain);
-    }else{
-        snprintf(sip_string, sizeof(sip_string), "user/%s%s", (config->info->phone_prefix == NULL ? "" : config->info->phone_prefix), config->info->phone_number);
+    link_t play_list = config->play_list;
+    if(play_list == NULL){
+        esl_log(ESL_LOG_INFO, "play_list is not init!now init it~\n");
+        play_list = new_link_list();
     }
-
-    if(config->info->codec != NULL){
-        snprintf(codec_string, sizeof(codec_string), "{absolute_codec_string=%s}", config->info->codec);    
-    }else{
-        *codec_string = 0;
+    if(file_name == NULL){
+        esl_log(ESL_LOG_ERROR, "file_name is NULL\n");
+        return -1;
     }
-
-    if(config->uuid != NULL){
-        snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", config->uuid);
-    }else{
-        esl_log(ESL_LOG_ERROR,"None uuid\n");
-        generate_string(uuid_generate, 16);
-        snprintf(uuid_string, sizeof(uuid_string), "{origination_uuid=%s}", uuid_generate);
-        esl_log(ESL_LOG_INFO,"create uuid[%s]\n",uuid_generate);
-
+    if(if_clean){
+        link_list_clear_free(play_list);
+        esl_log(ESL_LOG_INFO, "clear and free all node and all value in the play_list\n"); 
     }
-
-    if(config->info->caller_id != NULL){
-        snprintf(caller_id_string, sizeof(caller_id_string), "{origination_caller_id_number=%s}{origination_caller_id_name=%s}", config->info->caller_id, config->info->caller_id);    
-    }else{
-        *caller_id_string = 0;
+    char *file = string_malloc_copy(file_name);
+    esl_log(ESL_LOG_INFO, "file:%s\n",file);
+    if(file == NULL){
+        esl_log(ESL_LOG_ERROR, "file_name malloc error,exit!\n");
+        return -1;
     }
-
-	if(config->info->api_cmd != NULL){
-        snprintf(api_string, sizeof(api_string), "%s", config->info->api_cmd);    
+    if(if_last){
+        link_list_add_last(play_list, file);
     }else{
-        snprintf(api_string, sizeof(api_string), "&park");;
+        link_list_add_first(play_list, file);
     }
-
-    snprintf(call_string, sizeof(call_string), "bgapi originate %s%s%s%s %s", uuid_string, caller_id_string, codec_string, sip_string, api_string);
-    esl_log(ESL_LOG_INFO,"%s\n", call_string);
-    esl_send(config->handle, call_string);
-
     return 0;
 }
+
+/*
+*Description:get file from the head of play_list, remove it from list and free it 
+*param:config
+*param:play_file_name, the file we get
+*return:success: file_name fail:NULL
+*/
+char *get_from_playlist(sip_config_t config, char *play_file_name)
+{
+
+    if(!config->play_list->size){
+        esl_log(ESL_LOG_ERROR, "none file in list\n");
+        play_file_name = NULL;
+        return NULL;
+    }
+    char *value = link_list_get(config->play_list, 0);
+    if(value != NULL){
+        sprintf(play_file_name, "%s", value);
+        SAFE_FREE(value);
+    }else{
+        play_file_name = NULL;
+    }
+    link_list_remove_first(config->play_list);
+    return play_file_name;
+}
+
+/*
+*@Destription:从列表头部获取音频文件并播放
+*@config;
+*@return: success:0 fail:-1
+*/
+int play_form_list(sip_config_t config)
+{
+    if(config == NULL){
+        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
+        return -1;
+    }
+    char play_file[512];
+    if(config->play_list->size)
+    {
+            esl_log(ESL_LOG_INFO, "there are [%d] files in play list , uuid[%s], ready to play ~ ~\n", config->play_list->size, config->uuid);
+            get_from_playlist(config, play_file);
+            esl_log(ESL_LOG_INFO, "get file [%s] from play list ~ \n", play_file);
+            play_wav_file(play_file, config);
+    }
+    return 0;
+}
+
+/*
+@Destription:clear play_list and free all value in it
+@param: config
+@return: success:0 fail:-1
+*/
+inline int clear_free_playlist(sip_config_t config)
+{
+    if(config == NULL){
+        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
+        return -1;
+    }
+	link_list_clear_free(config->play_list);
+	esl_log(ESL_LOG_INFO, "clear and free all node and all value in the play_list\n"); 
+	return 0;
+}
+
+//}}
+
+//{{ 初始化及反初始化相关函数
+
 /*
 *@Description:init sip_config_t
 *@param:status_cb:状态回调结构体
@@ -379,59 +490,9 @@ sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phon
     esl_log(ESL_LOG_INFO, "%s\n", config->handle->last_sr_reply);
     return config;
 }
-/*
-*@Destription:从列表头部获取音频文件并播放
-*@config;
-*@return: success:0 fail:-1
-*/
-int play_form_list(sip_config_t config)
-{
-    if(config == NULL){
-        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
-        return -1;
-    }
-    char play_file[512];
-    if(config->play_list->size)
-    {
-            esl_log(ESL_LOG_INFO, "there are [%d] files in play list , uuid[%s], ready to play ~ ~\n", config->play_list->size, config->uuid);
-            get_from_playlist(config, play_file);
-            esl_log(ESL_LOG_INFO, "get file [%s] from play list ~ \n", play_file);
-            play_wav_file(play_file, config);
-    }
-    return 0;
-}
 
-/*
-*@Destription:进行录音
-*@config;
-*@return: success:0 fail:-1
-*/
-int record_call(sip_config_t config)
-{
-    char record_file[1024];
-    if(config == NULL){
-        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
-        return -1;
-    }
-    if(config->info->record_path == NULL){
-        config->info->record_path = string_malloc_copy("/home/record_path");
-        esl_log(ESL_LOG_INFO, "record_path is NULL,so we generate it to[%s]\n", config->info->record_path);
-    }
-    if(config->info->record_file_name == NULL){
-        snprintf(record_file, 1024, "%s.wav", config->uuid);
-        config->info->record_file_name = string_malloc_copy(record_file);
-        esl_log(ESL_LOG_INFO, "record_file_name is NULL,so we generate it to[%s]\n", config->info->record_file_name);
-    }
-    if(*(config->info->record_path + strlen(config->info->record_path) - 1 ) == '/'){
-        snprintf(record_file, 1024, "%s%s", config->info->record_path, config->info->record_file_name);
-    }else{
-        snprintf(record_file, 1024, "%s/%s", config->info->record_path, config->info->record_file_name);
-    }
-    esl_execute(config->handle, "mkdir", config->info->record_path, config->uuid);
-    esl_log(ESL_LOG_INFO, "record_file_name is %s\n", record_file);
-    esl_execute(config->handle, "record_session", record_file, config->uuid);
-    return 0;
-}
+//}}
+
 
 void* play_thread(void *arg)
 {
@@ -472,12 +533,8 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
         //esl_log(ESL_LOG_INFO, "[%s]%s\n", this_uuid, esl_event_name(event->event_id));
         switch (event->event_id) {
             case ESL_EVENT_CHANNEL_PARK:
-            {
-                // gettimeofday(&(config->answer_time), NULL);
-                esl_log(ESL_LOG_INFO, "channel parked~~~~\n");
-                // esl_execute(config->handle, "playback", "/opt/ninhao.wav", config->uuid);   
-                // pthread_create(pid_play, NULL, (void *)&play_thread, config);             
-                //esl_execute(config->handle, "hangup", NULL, config->uuid);
+            {
+                esl_log(ESL_LOG_INFO, "channel parked~~~~\n")
                 break;
             }
             case ESL_EVENT_CHANNEL_EXECUTE:
@@ -497,20 +554,11 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
            {
                 gettimeofday(&(config->answer_time), NULL);
                 esl_log(ESL_LOG_INFO, "channel answered~~~~\n");
-                sleep(1);
-                //play_form_list(config);
-                esl_execute(config->handle, "playback", "silence_stream://800,1400", config->uuid);
-                //esl_execute(config->handle, "record_session", "/home/record_path/test.wav", config->uuid); 
+				play_silence(800, config);
                 record_call(config); 
 
                 pthread_create(pid_play, NULL, (void *)&play_thread, config);  
-               /*
-                gettimeofday(&(config->answer_time), NULL);
-                esl_log(ESL_LOG_INFO, "channel answerd~~~~\n");
-                usleep(500000);
-                //esl_execute(config->handle, "playback", "/opt/queren.wav", config->uuid);
-                esl_execute(config->handle, "playback", "/opt/ninhao.wav", config->uuid);
-                */
+              
                 break;
            }
             case ESL_EVENT_PLAYBACK_START:
