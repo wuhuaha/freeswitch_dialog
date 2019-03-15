@@ -181,7 +181,7 @@ int make_call(sip_config_t config)
 *@param:config
 *@return: success:0 fail:-1
 */
-inline int play_wav_file(char *file_name, sip_config_t config)
+inline int play_wav_file(char *file_name, sip_config_t config, esl_handle_t *handle)
 {
     if(file_name == NULL){
         esl_log(ESL_LOG_ERROR, "file_name is NULL");
@@ -191,8 +191,14 @@ inline int play_wav_file(char *file_name, sip_config_t config)
         esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
         return -1;
     }
+    esl_handle_t *play_handle;
+    if(handle == NULL){
+        play_handle = config->handle;
+    }else{
+        play_handle = handle;
+    }
     esl_log(ESL_LOG_INFO, "[%s]in play wav file function", file_name);
-    esl_execute(config->handle, "playback", file_name, config->uuid);
+    esl_execute(play_handle, "playback", file_name, config->uuid);
     return 0;
 }
 
@@ -202,16 +208,22 @@ inline int play_wav_file(char *file_name, sip_config_t config)
 *@param:config
 *@return: success:0 fail:-1
 */
-inline int play_silence(int play_silence_time_ms, sip_config_t config)
+inline int play_silence(int play_silence_time_ms, sip_config_t config, esl_handle_t *handle)
 {
 	if(config == NULL){
         esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
         return -1;
     }
+    esl_handle_t *play_handle;
+    if(handle == NULL){
+        play_handle = config->handle;
+    }else{
+        play_handle = handle;
+    }
 	char play_silence_cmd[63];
 	snprintf(play_silence_cmd, strlen(play_silence_cmd), "silence_stream://%d", play_silence_time_ms);
-    esl_log(ESL_LOG_INFO, "play [%d]ms silence stream\n", play_silence_time_ms);
-    esl_execute(config->handle, "playback", play_silence_cmd, config->uuid);
+    esl_log(ESL_LOG_INFO, "play [%d]ms silence stream(%s)\n", play_silence_time_ms, play_silence_cmd);
+    esl_execute(play_handle, "playback", play_silence_cmd, config->uuid);
     return 0;
 }
 
@@ -364,6 +376,44 @@ int add_to_playlist(char *file_name, sip_config_t config, int if_last, int if_cl
     return 0;
 }
 
+/*@Description: Add silence stream to play_list 将音频文件加入到播放列表中
+*@param:play_silence_time_ms ; how long silence adding into list
+*@param:config ; uniu config
+*@param:if_last ; if add into last or first
+*@pfaram:if_clean; if clean play_list
+*@return: success:0 error:-1
+*/
+int add_silence_to_playlist(int play_silence_time_ms, sip_config_t config, int if_last, int if_clean)
+{
+    link_t play_list = config->play_list;
+    if(play_list == NULL){
+        esl_log(ESL_LOG_INFO, "play_list is not init!now init it~\n");
+        play_list = new_link_list();
+    }
+    char file_name[128];
+	snprintf(file_name, 128, "silence_stream://%d", play_silence_time_ms);
+
+    if(play_silence_time_ms <= 0){
+        esl_log(ESL_LOG_ERROR, "play_silence_time_ms is 0\n");
+    }
+    if(if_clean){
+        link_list_clear_free(play_list);
+        esl_log(ESL_LOG_INFO, "clear and free all node and all value in the play_list\n"); 
+    }
+    char *file = string_malloc_copy(file_name);
+    esl_log(ESL_LOG_INFO, "file_name[%s],file:[%s]\n",file_name, file);
+    if(file == NULL){
+        esl_log(ESL_LOG_ERROR, "file_name malloc error,exit!\n");
+        return -1;
+    }
+    if(if_last){
+        link_list_add_last(play_list, file);
+    }else{
+        link_list_add_first(play_list, file);
+    }
+    return 0;
+}
+
 /*
 *Description:get file from the head of play_list, remove it from list and free it 
 *param:config
@@ -406,7 +456,7 @@ int play_form_list(sip_config_t config)
             esl_log(ESL_LOG_INFO, "there are [%d] files in play list , uuid[%s], ready to play ~ ~\n", config->play_list->size, config->uuid);
             get_from_playlist(config, play_file);
             esl_log(ESL_LOG_INFO, "get file [%s] from play list ~ \n", play_file);
-            play_wav_file(play_file, config);
+            play_wav_file(play_file, config, config->play_handle);
     }
     return 0;
 }
@@ -452,6 +502,8 @@ sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phon
     //init esl_handle
     config->handle = malloc(sizeof(esl_handle_t));
     memset(config->handle, 0, sizeof(esl_handle_t));
+    config->play_handle = malloc(sizeof(esl_handle_t));
+    memset(config->play_handle, 0, sizeof(esl_handle_t));
     //init status call back function
     config->status_cb = status_cb;
     //init sip_info
@@ -485,6 +537,13 @@ sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phon
     }else{
         esl_log(ESL_LOG_INFO, "Connected to FreeSWITCH\n");
     }
+    status = esl_connect(config->play_handle, "127.0.0.1", 8021, NULL, "ClueCon");
+    if (status != ESL_SUCCESS) {
+        esl_log(ESL_LOG_INFO, "play handle connect Error: %d\n", status);
+        return NULL;
+    }else{
+        esl_log(ESL_LOG_INFO, "play handle connected to FreeSWITCH\n");
+    }
     esl_filter(config->handle, "unique-id", config->uuid);
     esl_events(config->handle, ESL_EVENT_TYPE_PLAIN,  "ALL");
     esl_log(ESL_LOG_INFO, "%s\n", config->handle->last_sr_reply);
@@ -502,7 +561,7 @@ void* play_thread(void *arg)
     while(1)
     {
         gettimeofday(&now, NULL);
-        if(timeval_sub(now, config->answer_time) < 1000 ){
+        if(timeval_sub(now, config->answer_time) < 300 ){
             usleep(5000);
         }else{
             break;
@@ -533,8 +592,8 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
         //esl_log(ESL_LOG_INFO, "[%s]%s\n", this_uuid, esl_event_name(event->event_id));
         switch (event->event_id) {
             case ESL_EVENT_CHANNEL_PARK:
-            {
-                esl_log(ESL_LOG_INFO, "channel parked~~~~\n")
+            {
+                esl_log(ESL_LOG_INFO, "channel parked~~~~\n");
                 break;
             }
             case ESL_EVENT_CHANNEL_EXECUTE:
@@ -554,7 +613,8 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
            {
                 gettimeofday(&(config->answer_time), NULL);
                 esl_log(ESL_LOG_INFO, "channel answered~~~~\n");
-				play_silence(800, config);
+		        //sleep(1);
+		        //play_silence(800, config);
                 record_call(config); 
 
                 pthread_create(pid_play, NULL, (void *)&play_thread, config);  
@@ -641,6 +701,8 @@ int main(void)
 
     config->handle->event_lock = 1;
   
+    add_to_playlist("/opt/swmy.wav", config, 1, 0);
+    add_silence_to_playlist(5000, config, 1, 0);
     add_to_playlist("/opt/swmy.wav", config, 1, 0);
 
     pthread_create(&pid_listen, NULL, (void *)&event_listen_thread, config);

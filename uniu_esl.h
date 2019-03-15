@@ -75,6 +75,7 @@ typedef enum
 typedef struct
 {
     esl_handle_t *handle;//esl handle
+    esl_handle_t *play_handle;
     esl_info_t esl;//esl配置信息
     sip_status_cb_t status_cb;//状态回调
     sip_info_t info; //sip呼叫信息
@@ -93,7 +94,13 @@ int add_to_playlist(char *file_name, sip_config_t config, int if_last, int if_cl
 // 获取wav文件的时长，单位：毫秒
 double get_wav_time_length(char* file_name);
 
-int play_wav_file(char *file_name,  sip_config_t config);
+/*
+*@Destription:播放指定的文件
+*@param:file_name:文件名
+*@param:config
+*@return: success:0 fail:-1
+*/
+inline int play_wav_file(char *file_name, sip_config_t config, esl_handle_t *handle);
 
 int make_call(sip_config_t config);
 
