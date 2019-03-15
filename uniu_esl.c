@@ -1,9 +1,20 @@
+/*************************************************    
+Authors:        wuhuaha
+mail:			cn_wwangtao@163.com
+Description:    make phone and dialog by esl for freeswitch.                
+History:       
+    1. Date:    2019/3/15
+       Author:  wuhuaha
+       Modification:   v1.0
+*************************************************/
 #include <stdio.h>
 #include <stdlib.h>
 #include <esl.h>
 #include <time.h>
 #include "uniu_list.h"
 #include "uniu_esl.h"
+
+#define TEST 1
 
 //{辅助性独立工具函数，与系统逻辑无关
 /*
@@ -549,10 +560,52 @@ sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phon
     esl_log(ESL_LOG_INFO, "%s\n", config->handle->last_sr_reply);
     return config;
 }
+/*
+*Description:free sip_info and member of it
+*@param:info- the sip_info what we want to free
+*@return: seccess: 0
+*/
+static inline int free_sip_info(sip_info_t info)
+{
+	SAFE_FREE(info->domain);
+	SAFE_FREE(info->codec);
+	SAFE_FREE(info->phone_number);
+	SAFE_FREE(info->phone_prefix);
+	SAFE_FREE(info->caller_id);	
+	SAFE_FREE(info->api_cmd);
+	SAFE_FREE(info->record_path);
+	SAFE_FREE(info->record_file_name);
+	SAFE_FREE(info);
+	return 0;
+}
+
+int sip_config_uninit(sip_config_t config)
+{
+	//disconnect handle
+	esl_disconnect(config->handle);
+	//disconnect play_handle
+	esl_disconnect(config->play_handle);
+	//free handle
+	SAFE_FREE(config->handle);
+	//free play_handle
+	SAFE_FREE(config->play_handle);
+	
+	//free info
+	free_sip_info(config->info);
+	//free uuid
+	SAFE_FREE(config->uuid);
+	//free play_list
+	free_link_list_and_value(config->play_list);
+
+	//free config
+	SAFE_FREE(config);
+    return 0;
+}
+
 
 //}}
 
-
+//{{ 线程相关，包括播放线程 和 事件监听及回调线程
 void* play_thread(void *arg)
 {
     sip_config_t config = (sip_config_t)arg;
@@ -679,6 +732,8 @@ void* event_listen_thread(void *arg)
     return 0;
 }
 
+//}}
+#if TEST
 int main(void)
 {
 	
@@ -723,9 +778,10 @@ int main(void)
 
 
 end:
-
-	esl_disconnect(config->handle);
+	sip_config_uninit(config);
+	//esl_disconnect(config->handle);
     /*
     */
 	return 0;
 }
+#endif
