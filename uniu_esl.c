@@ -261,24 +261,25 @@ int start_fy_asr(sip_config_t config, char *audio_dir, char *audio_prefix, char 
     }
 	if(audio_dir == NULL){
 		audio_dir = config->info->record_path;
-		esl_log(ESL_LOG_INFO, "audio dir is NULL, set it to %s", audio_dir),
+		esl_log(ESL_LOG_INFO, "audio dir is NULL, set it to %s", audio_dir);
 	}
 	if(audio_prefix == NULL){
 		audio_prefix = config->info->record_file_name;
-		esl_log(ESL_LOG_INFO, "audio prefix is NULL, set it to %s", audio_prefix),
+		esl_log(ESL_LOG_INFO, "audio prefix is NULL, set it to %s", audio_prefix);
 	}
 	if(audio_class == NULL){
 		char default_class[] = "raw";
 		audio_class = default_class;
-		esl_log(ESL_LOG_INFO, "audio class is NULL, set it to %s", audio_class),
+		esl_log(ESL_LOG_INFO, "audio class is NULL, set it to %s", audio_class);
 	}
 	if((audio_rate != 8000) && (audio_rate != 16000)){
 		audio_rate = 8000;
-		esl_log(ESL_LOG_INFO, "audio rate is not 8000  or 16000, set it to %d", audio_rate),
+		esl_log(ESL_LOG_INFO, "audio rate is not 8000  or 16000, set it to %d", audio_rate);
 	}
 	char start_fy_asr_cmd[1024];
 	snprintf(start_fy_asr_cmd, strlen(start_fy_asr_cmd), "%s %s %d %s", audio_dir, audio_prefix, audio_rate, audio_class);
     esl_log(ESL_LOG_INFO, "start_fy_asr_cmd(%s)\n", start_fy_asr_cmd);
+	esl_execute(config->handle, "mkdir", audio_dir, config->uuid);
     esl_execute(config->handle, "start_fy_asr", start_fy_asr_cmd, config->uuid);
     return 0;
 }
