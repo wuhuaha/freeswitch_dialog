@@ -183,7 +183,7 @@ int make_call(sip_config_t config)
     esl_log(ESL_LOG_INFO,"%s\n", call_string);
     esl_send(config->handle, call_string);
 
-	if(config->status_cb->makecall_cb != NULL)
+	if( (config->status_cb != NULL) &&  (config->status_cb->makecall_cb != NULL))
 	{
 		config->status_cb->makecall_cb();
 	}
@@ -610,7 +610,7 @@ sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phon
     esl_log(ESL_LOG_INFO, "%s\n", config->handle->last_sr_reply);
 
 	//init cb
-	if(config->status_cb->init_cb != NULL)
+	if( (config->status_cb != NULL) &&  (config->status_cb->init_cb != NULL) )
 	{
 		config->status_cb->init_cb();
 	}
@@ -654,14 +654,15 @@ int sip_config_uninit(sip_config_t config)
 	//free play_list
 	free_link_list_and_value(config->play_list);
 
+	// unint cb
+	if( (config->status_cb != NULL) && (config->status_cb->uninit_cb != NULL))
+	{
+			config->status_cb->uninit_cb();
+	}
+
 	//free config
 	SAFE_FREE(config);
 
-	// unint cb
-	if(config->status_cb->uninit_cb != NULL)
-	{
-		config->status_cb->uninit_cb();
-	}
     return 0;
 }
 
@@ -736,7 +737,7 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
                 gettimeofday(&(config->answer_time), NULL);
                 esl_log(ESL_LOG_INFO, "channel answered~~~~\n");
                 record_call(config); 
-				if(config->status_cb->answer_cb != NULL)
+				if( (config->status_cb != NULL) && (config->status_cb->answer_cb != NULL))
 				{
 					config->status_cb->answer_cb();
 				}				
@@ -755,7 +756,7 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
                 //set_playing_file_status(play_file_name, config);
                 //}}
 
-				if(config->status_cb->playback_start_cb != NULL)
+				if( (config->status_cb != NULL) && (config->status_cb->playback_start_cb != NULL))
 				{
 					config->status_cb->playback_start_cb();
 				}				
@@ -769,7 +770,7 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
                 play_file_name = esl_event_get_header(event, "variable_current_application_data");
                 esl_log(ESL_LOG_INFO, "play [%s] end~ ~ ~\n", play_file_name);
 				
-				if(config->status_cb->playback_end_cb != NULL)
+				if( (config->status_cb != NULL) && (config->status_cb->playback_end_cb != NULL))
 				{
 					config->status_cb->playback_end_cb();
 				}				
@@ -777,7 +778,7 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
            }
             case ESL_EVENT_RECORD_START:
            {
-           		if(config->status_cb->record_start_cb != NULL)
+           		if( (config->status_cb != NULL) && (config->status_cb->record_start_cb != NULL))
 				{
 					config->status_cb->record_start_cb();
 				}
@@ -785,7 +786,7 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
            }
 			case ESL_EVENT_DTMF:
 			{
-				if(config->status_cb->dtmf_cb != NULL)
+				if( (config->status_cb != NULL) && (config->status_cb->dtmf_cb != NULL))
 				{
 					config->status_cb->dtmf_cb();
 				}
@@ -793,7 +794,7 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
 			}
             case ESL_EVENT_RECORD_STOP:
            {
-           		if(config->status_cb->record_end_cb != NULL)
+           		if( (config->status_cb != NULL) && (config->status_cb->record_end_cb != NULL))
 				{
 					config->status_cb->record_end_cb();
 				}
