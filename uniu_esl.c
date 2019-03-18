@@ -839,10 +839,11 @@ int main(void)
         "SESSION_HEARTBEAT CHANNEL_ANSWER CHANNEL_ORIGINATE CHANNEL_PROGRESS CHANNEL_HANGUP "
 			   "CHANNEL_BRIDGE CHANNEL_UNBRIDGE CHANNEL_OUTGOING CHANNEL_EXECUTE CHANNEL_EXECUTE_COMPLETE DTMF ");
     */
-   
+
+	sip_status_cb status_cb_test = {0};
     
     //sip_config_t config = sip_config_init( NULL,  NULL, "1004", NULL, "123", NULL, NULL, NULL, "/root/record_path", "test1.wav");
-    sip_config_t config = sip_config_init( NULL,  NULL, "13053075601", NULL, "123", "192.168.11.81", NULL, NULL, NULL, NULL);
+    sip_config_t config = sip_config_init( &status_cb_test,  NULL, "13053075601", NULL, "123", "192.168.11.81", NULL, NULL, NULL, NULL);
     char play_file[512];
     struct timeval now;
     int answer_time_flag = 0;
