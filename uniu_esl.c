@@ -668,6 +668,30 @@ int sip_config_uninit(sip_config_t config)
 //}}
 
 //{{ 线程相关，包括播放线程 和 事件监听及回调线程
+void* play_thread(void *arg)
+{
+    sip_config_t config = (sip_config_t)arg;
+    esl_log(ESL_LOG_INFO, "play thread start ~ ~\n");
+    struct timeval now;
+    while(1)
+    {
+        gettimeofday(&now, NULL);
+        if(timeval_sub(now, config->answer_time) < 300 ){
+            usleep(5000);
+        }else{
+            break;
+        }
+    }
+    while(1)
+    {
+        play_form_list(config);
+        usleep(5000);
+    }
+    
+    esl_log(ESL_LOG_INFO, "play thread ended ~ ~\n");
+    return 0;
+}
+
 
 void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
 {
@@ -802,30 +826,6 @@ void* event_listen_thread(void *arg)
         }
 	}
     esl_log(ESL_LOG_INFO, "event listen thread ended ~ ~\n");
-    return 0;
-}
-
-void* play_thread(void *arg)
-{
-    sip_config_t config = (sip_config_t)arg;
-    esl_log(ESL_LOG_INFO, "play thread start ~ ~\n");
-    struct timeval now;
-    while(1)
-    {
-        gettimeofday(&now, NULL);
-        if(timeval_sub(now, config->answer_time) < 300 ){
-            usleep(5000);
-        }else{
-            break;
-        }
-    }
-    while(1)
-    {
-        play_form_list(config);
-        usleep(5000);
-    }
-    
-    esl_log(ESL_LOG_INFO, "play thread ended ~ ~\n");
     return 0;
 }
 
