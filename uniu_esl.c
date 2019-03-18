@@ -214,7 +214,8 @@ inline int play_wav_file(char *file_name, sip_config_t config, esl_handle_t *han
 		esl_log(ESL_LOG_INFO, "[%s]in play wav file function", file_name);
     	esl_execute(handle, "playback", file_name, config->uuid);
 	}
-   
+
+	set_playing_file_status(file_name, config);
     return 0;
 }
 
@@ -751,7 +752,7 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
                 esl_log(ESL_LOG_INFO, "play [%s] start~ ~ ~\n", play_file_name);
 
                 //修改playing_file_status状态标记{{    
-                set_playing_file_status(play_file_name, config);
+                //set_playing_file_status(play_file_name, config);
                 //}}
 
 				if(config->status_cb->playback_start_cb != NULL)

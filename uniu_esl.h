@@ -113,6 +113,7 @@ sip_config_t sip_config_init( sip_status_cb_t status_cb,  char *uuid, char *phon
 //when playing file last time less than protect(ms), clean play list, else, break it and clean play list
 int break_playing_file(sip_config_t config, int protect);
 
+int set_playing_file_status(char *file_name, sip_config_t config);
 //将正在拨打的音频重置掉
 int reset_playing_file_status(sip_config_t config);
 
