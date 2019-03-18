@@ -17,16 +17,20 @@
 //回调函数声明
 typedef struct
 {
-    int (*init_cb)(void*); //初始化
-    int (*calling_cb)(void*);//呼叫
-    int (*incoming_cb)(void*);//收到呼入
-    int (*early_cb)(void*);//对方收到呼叫
-    int (*confirmed_cb)(void*);//正在通话
-    int (*disconnetd_cb)(void*);//挂断
-    int (*disconfirmed_cb)(void*);//不接听主动挂断
-    int (*dtmp_cb)(void*);//按键
-    int (*playback_start_cb)(void*);//开始播放音频
-    int (*playback_end_cb)(void*);//播放音频结束
+    int (*init_cb)(); //初始化
+    int (*uninit_cb)(); //反初始化
+    int (*makecall_cb)();//呼叫
+    int (*incoming_cb)();//收到呼入
+    int (*early_cb)();//对方收到呼叫
+    int (*answer_cb)();//接通
+    int (*confirmed_cb)();//正在通话
+    int (*disconnetd_cb)();//挂断
+    int (*disconfirmed_cb)();//不接听主动挂断
+    int (*dtmf_cb)();//按键
+    int (*playback_start_cb)();//开始播放音频
+    int (*playback_end_cb)();//播放音频结束
+    int (*record_start_cb)();//播放音频结束
+    int (*record_end_cb)();//播放音频结束
 } sip_status_cb;
 
 typedef sip_status_cb * sip_status_cb_t;
