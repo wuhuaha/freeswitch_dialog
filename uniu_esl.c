@@ -833,6 +833,12 @@ void* event_listen_thread(void *arg)
 
 //}}
 #if TEST
+
+int  test_answer_cb()
+{
+	esl_log(ESL_LOG_INFO, "answer call back test~ ~\n");
+}
+
 int main(void)
 {
 	
@@ -843,6 +849,8 @@ int main(void)
     */
 
 	sip_status_cb status_cb_test = {0};
+
+	status_cb_test.answer_cb = test_answer_cb;
     
     //sip_config_t config = sip_config_init( NULL,  NULL, "1004", NULL, "123", NULL, NULL, NULL, "/root/record_path", "test1.wav");
     sip_config_t config = sip_config_init( &status_cb_test,  NULL, "13053075601", NULL, "123", "192.168.11.81", NULL, NULL, NULL, NULL);
