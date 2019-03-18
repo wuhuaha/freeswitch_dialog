@@ -119,4 +119,15 @@ int reset_playing_file_status(sip_config_t config);
 
 char *get_from_playlist(sip_config_t config, char *play_file_name);
 
+/*
+*@Destription:取语音流模块开始取语音流
+*@param:config
+*@param:audio_dir:where audio save to (if NULL ,set it to config->info->record_path)
+*@param:audio_prefix:prefix of audio name  (if NULL ,set it to config->info->record_file_name)
+*@param:audio_class:calss of audio [raw/wav] (if NULL ,set it to "raw")
+*@param:audio_rate:rate of audio (if not 8000/16000 ,set it to 8000)
+*@return: success:0 fail:-1
+*/
+int start_fy_asr(sip_config_t config, char *audio_dir, char *audio_prefix, char *audio_class, int audio_rate);
+
 #endif

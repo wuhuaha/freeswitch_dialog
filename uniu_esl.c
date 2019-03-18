@@ -245,6 +245,46 @@ inline int play_silence(int play_silence_time_ms, sip_config_t config, esl_handl
 }
 
 /*
+*@Destription:取语音流模块开始取语音流
+*@param:config
+*@param:audio_dir:where audio save to (if NULL ,set it to config->info->record_path)
+*@param:audio_prefix:prefix of audio name  (if NULL ,set it to config->info->record_file_name)
+*@param:audio_class:calss of audio [raw/wav] (if NULL ,set it to "raw")
+*@param:audio_rate:rate of audio (if not 8000/16000 ,set it to 8000)
+*@return: success:0 fail:-1
+*/
+int start_fy_asr(sip_config_t config, char *audio_dir, char *audio_prefix, char *audio_class, int audio_rate)
+{
+	if(config == NULL){
+        esl_log(ESL_LOG_ERROR, "sip_config_t is NULL");
+        return -1;
+    }
+	if(audio_dir == NULL){
+		audio_dir = config->info->record_path;
+		esl_log(ESL_LOG_INFO, "audio dir is NULL, set it to %s", audio_dir),
+	}
+	if(audio_prefix == NULL){
+		audio_prefix = config->info->record_file_name;
+		esl_log(ESL_LOG_INFO, "audio prefix is NULL, set it to %s", audio_prefix),
+	}
+	if(audio_class == NULL){
+		char default_class[] = "raw";
+		audio_class = default_class;
+		esl_log(ESL_LOG_INFO, "audio class is NULL, set it to %s", audio_class),
+	}
+	if((audio_rate != 8000) && (audio_rate != 16000)){
+		audio_rate = 8000;
+		esl_log(ESL_LOG_INFO, "audio rate is not 8000  or 16000, set it to %d", audio_rate),
+	}
+	char start_fy_asr_cmd[1024];
+	snprintf(start_fy_asr_cmd, strlen(start_fy_asr_cmd), "%s %s %d %s", audio_dir, audio_prefix, audio_rate, audio_class);
+    esl_log(ESL_LOG_INFO, "start_fy_asr_cmd(%s)\n", start_fy_asr_cmd);
+    esl_execute(config->handle, "start_fy_asr", start_fy_asr_cmd, config->uuid);
+    return 0;
+}
+
+
+/*
 *@Destription:进行录音
 *@config;
 *@return: success:0 fail:-1
@@ -862,6 +902,9 @@ int main(void)
 
     make_call(config);
 
+	
+	start_fy_asr(config, NULL, "test", "raw", 8000);
+
     config->handle->event_lock = 1;
   
     add_to_playlist("/opt/swmy.wav", config, 1, 0);
@@ -870,18 +913,6 @@ int main(void)
 
     pthread_create(&pid_listen, NULL, (void *)&event_listen_thread, config);
 
-    /*创建语音文件播放线程*/
-    /*
-    
-    if (0 != pthread_create(&pid_play, NULL, (void *)&play_thread, config)){
-        // log_error("create play thread error:%s(errno:%d)", strerror(errno), errno);
-        // yfs_media_thread_quit();
-        // pthread_join(g_pid_capture, NULL);
-        // SAFE_FERR_ASR_HANDLE(asr_handle);
-        // event_queue_uninit(&media_event_queu);
-        return -1;
-    }
-    */
     pthread_join(pid_listen, NULL);
 
 
