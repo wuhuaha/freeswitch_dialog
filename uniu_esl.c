@@ -741,23 +741,47 @@ void process_event(sip_config_t config, int *runflag, pthread_t *pid_play)
     esl_handle_t *handle = config->handle;
     char *uuid = config->uuid;
     esl_event_t *event = config->handle->last_ievent;
-    char *this_uuid = esl_event_get_header(event, "Caller-Unique-ID");
+    char *this_uuid = esl_event_get_header(event, "Unique-ID");
+	char *event_sequence = esl_event_get_header(event, "Event-Sequence");
     char *play_file_name = NULL;
     //esl_log(ESL_LOG_INFO, "[%s]%s\n", this_uuid, esl_event_name(event->event_id));
     /*
     */
     if(strcmp(uuid, this_uuid) == 0)
     {
-        //esl_log(ESL_LOG_INFO, "[%s]%s\n", this_uuid, esl_event_name(event->event_id));
+        esl_log(ESL_LOG_INFO, "[%s][%s]%s\n", this_uuid, event_sequence, esl_event_name(event->event_id));
         switch (event->event_id) {
             case ESL_EVENT_CHANNEL_PARK:
             {
+            	start_fy_asr(config, "/root/test_record", "test", "raw", 8000);
                 esl_log(ESL_LOG_INFO, "channel parked~~~~\n");
                 break;
             }
 			case ESL_EVENT_CUSTOM:
 			{
-				
+				char *event_subclass = esl_event_get_header(event, "Event-Subclass");
+				if(event_subclass != NULL)
+				{
+					if(strcmp(event_sequence, "ACTIVE_FLAG") == 0)
+					{
+						char *active_flag = esl_event_get_header(event, "Active-Flag");
+						if(strcmp(active_flag, "active") == 0)
+						{
+							esl_log(ESL_LOG_INFO, "active now~~~~\n");
+						}else{
+							esl_log(ESL_LOG_INFO, "unactive now~~~~\n");
+						}
+					
+					}else if(strcmp(event_sequence, "GETED_PCM") == 0){
+						char *get_file_name = esl_event_get_header(event, "Get-Pcm");
+						if(get_file_name != NULL)
+						{
+							esl_log(ESL_LOG_INFO, "GETED FILE NAME %s ~~~~\n", get_file_name);
+						}
+					}else{
+
+					}
+				}
 				break;
 			}
             case ESL_EVENT_CHANNEL_EXECUTE:
@@ -902,9 +926,6 @@ int main(void)
     pthread_t pid_listen = {0};
 
     make_call(config);
-
-	
-	start_fy_asr(config, NULL, "test", "raw", 8000);
 
     config->handle->event_lock = 1;
   
