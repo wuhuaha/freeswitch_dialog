@@ -277,7 +277,7 @@ int start_fy_asr(sip_config_t config, char *audio_dir, char *audio_prefix, char 
 		esl_log(ESL_LOG_INFO, "audio rate is not 8000  or 16000, set it to %d", audio_rate);
 	}
 	char start_fy_asr_cmd[1024];
-	snprintf(start_fy_asr_cmd, strlen(start_fy_asr_cmd), "%s %s %d %s", audio_dir, audio_prefix, audio_rate, audio_class);
+	snprintf(start_fy_asr_cmd, sizeof(start_fy_asr_cmd), "%s %s %d %s", audio_dir, audio_prefix, audio_rate, audio_class);
     esl_log(ESL_LOG_INFO, "start_fy_asr_cmd(%s)\n", start_fy_asr_cmd);
 	esl_execute(config->handle, "mkdir", audio_dir, config->uuid);
     esl_execute(config->handle, "start_fy_asr", start_fy_asr_cmd, config->uuid);
